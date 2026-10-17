@@ -64,13 +64,13 @@ textarea.note { resize: none; height: 52px; }
   <input id="pick" list="papers" placeholder="或选择已有论文…">
   <datalist id="papers"></datalist>
 </div>
-<div class="tags" id="tags"><input id="tagIn" list="tagList" placeholder="标签：回车添加"></div>
+<div class="tags" id="tags"><input id="tagIn" list="tagList" placeholder="标签：回车添加，空回车跳到备注"></div>
 <datalist id="tagList"></datalist>
 <textarea class="note" id="note" placeholder="备注（回车保存，⇧回车换行）"></textarea>
 <div class="actions">
   <button class="ghost" id="del">丢弃 ⌘⌫</button>
   <span class="sp"></span>
-  <span>Esc 关闭（已自动保存）</span>
+  <span>⌘⏎ 保存 · Esc 保存并关闭</span>
   <button class="save" id="save">保存 ⏎</button>
 </div>
 <script>
@@ -178,9 +178,9 @@ $('pick').addEventListener('keydown', e => {
   }
 });
 $('tagIn').addEventListener('keydown', e => {
-  if ((e.key === 'Enter' || e.key === ',' || e.key === '，') && !e.isComposing) {
+  if ((e.key === 'Enter' || e.key === ',' || e.key === '，') && !e.isComposing && !e.metaKey) {
     e.preventDefault(); e.stopPropagation();
-    if (!addTag() && e.key === 'Enter') save();
+    if (!addTag() && e.key === 'Enter') $('note').focus();   // 空回车：跳到备注，不保存
   } else if (e.key === 'Backspace' && !$('tagIn').value && tags.length) { tags.pop(); renderTags(); }
 });
 $('note').addEventListener('keydown', e => {
