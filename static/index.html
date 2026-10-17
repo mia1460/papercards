@@ -149,6 +149,9 @@ body.quad-mode .grid { flex: 1; min-height: 0; }
 .card .note:hover { outline: 1px solid var(--line); }
 .card .note.add { background: none; color: var(--muted); padding: 2px 0; opacity: 0; }
 .card:hover .note.add { opacity: 1; }
+.card .content { cursor: text; }
+.card .content:hover { outline: 1px solid var(--line); outline-offset: 3px; border-radius: 3px; }
+.card textarea.note-edit.content-edit { font: 14.5px/1.6 Georgia, "Songti SC", serif; margin-top: 0; max-height: 60vh; }
 .card textarea.note-edit { display: block; width: 100%; margin-top: 8px; font: 13px/1.5 inherit; font-family: inherit; color: var(--ink); background: var(--bg);
   border: 1px solid var(--accent); border-radius: 6px; padding: 6px 8px; resize: vertical; min-height: 60px; outline: none; }
 .card .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
@@ -649,7 +652,7 @@ function cardHTML(c) {
     <div class="body">
       ${c.image ? `<img src="/images/${c.image}" loading="lazy" data-act="zoom" ${c.img_w ? `width="${c.img_w}" height="${c.img_h}" style="aspect-ratio:${c.img_w}/${c.img_h}"` : ''}>` : ''}
       <div class="txt">
-        ${c.content ? `<div class="content ${c.content.length > 500 ? 'long' : ''}" ${c.content.length > 500 ? 'data-act="expand"' : ''}>${esc(c.content)}</div>` : ''}
+        ${c.content ? `<div class="content ${c.content.length > 500 ? 'long' : ''}" data-act="content" title="点击编辑">${esc(c.content)}</div>` : ''}
         ${c.note ? `<div class="note" data-act="note" title="点击编辑">${esc(c.note)}</div>` : `<div class="note add" data-act="note">+ 备注</div>`}
         <div class="tags">${c.tags.map(t => `<span class="chip">#${esc(t)}<span class="x" data-act="rmtag" data-t="${esc(t)}" title="移除标签">×</span></span>`).join('')}<button class="addtag" data-act="addtag">+ 标签</button></div>
       </div>
@@ -733,7 +736,7 @@ $('grid').addEventListener('click', async e => {
   if (!act) return;
   const el = e.target.closest('.card'), c = S.cards.find(x => x.id === +el.dataset.id);
   if (act === 'zoom') { $('lightbox').querySelector('img').src = e.target.src; $('lightbox').classList.add('on'); }
-  if (act === 'expand') e.target.classList.remove('long');
+  if (act === 'content') editContent(e.target, c);
   if (act === 'note') editNote(e.target, c);
   if (act === 'rmtag') {
     c.tags = c.tags.filter(t => t !== e.target.dataset.t);
@@ -755,6 +758,31 @@ $('grid').addEventListener('click', async e => {
   }
 });
 // 点击备注直接编辑：失焦或回车保存，⇧回车换行，Esc 取消
+// 点击内容直接编辑：回车换行，⌘回车或失焦保存，Esc 取消
+function editContent(el, c) {
+  const ta = document.createElement('textarea');
+  ta.className = 'note-edit content-edit';
+  ta.value = c.content || '';
+  ta.placeholder = '内容（⌘回车保存，Esc 取消）';
+  el.replaceWith(ta);
+  const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.max(80, ta.scrollHeight + 2) + 'px'; };
+  grow(); ta.addEventListener('input', grow);
+  ta.focus();
+  let done = false;
+  const finish = async save => {
+    if (done) return; done = true;
+    if (save && ta.value !== (c.content || '')) {
+      c.content = ta.value;
+      await api('/api/cards/' + c.id, { method: 'PUT', body: JSON.stringify({ content: ta.value }) });
+    }
+    render();
+  };
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); finish(true); }
+    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  ta.addEventListener('blur', () => finish(true));
+}
 function editNote(el, c) {
   const ta = document.createElement('textarea');
   ta.className = 'note-edit';
