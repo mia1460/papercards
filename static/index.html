@@ -652,7 +652,7 @@ function cardHTML(c) {
     <div class="body">
       ${c.image ? `<img src="/images/${c.image}" loading="lazy" data-act="zoom" ${c.img_w ? `width="${c.img_w}" height="${c.img_h}" style="aspect-ratio:${c.img_w}/${c.img_h}"` : ''}>` : ''}
       <div class="txt">
-        ${c.content ? `<div class="content ${c.content.length > 500 ? 'long' : ''}" data-act="content" title="点击编辑">${esc(c.content)}</div>` : ''}
+        ${c.content ? `<div class="content ${c.content.length > 500 ? 'long' : ''}" ${c.content.length > 500 ? 'data-act="expand"' : ''} title="${c.content.length > 500 ? '单击展开全文，' : ''}双击编辑">${esc(c.content)}</div>` : ''}
         ${c.note ? `<div class="note" data-act="note" title="点击编辑">${esc(c.note)}</div>` : `<div class="note add" data-act="note">+ 备注</div>`}
         <div class="tags">${c.tags.map(t => `<span class="chip">#${esc(t)}<span class="x" data-act="rmtag" data-t="${esc(t)}" title="移除标签">×</span></span>`).join('')}<button class="addtag" data-act="addtag">+ 标签</button></div>
       </div>
@@ -736,7 +736,7 @@ $('grid').addEventListener('click', async e => {
   if (!act) return;
   const el = e.target.closest('.card'), c = S.cards.find(x => x.id === +el.dataset.id);
   if (act === 'zoom') { $('lightbox').querySelector('img').src = e.target.src; $('lightbox').classList.add('on'); }
-  if (act === 'content') editContent(e.target, c);
+  if (act === 'expand') e.target.classList.remove('long');
   if (act === 'note') editNote(e.target, c);
   if (act === 'rmtag') {
     c.tags = c.tags.filter(t => t !== e.target.dataset.t);
@@ -758,7 +758,13 @@ $('grid').addEventListener('click', async e => {
   }
 });
 // 点击备注直接编辑：失焦或回车保存，⇧回车换行，Esc 取消
-// 点击内容直接编辑：回车换行，⌘回车或失焦保存，Esc 取消
+// 双击内容直接编辑（单击长内容仍是展开全文）：回车换行，⌘回车或失焦保存，Esc 取消
+$('grid').addEventListener('dblclick', e => {
+  const el = e.target.closest('.card .content');
+  if (!el) return;
+  const c = S.cards.find(x => x.id === +el.closest('.card').dataset.id);
+  if (c) { window.getSelection().removeAllRanges(); editContent(el, c); }
+});
 function editContent(el, c) {
   const ta = document.createElement('textarea');
   ta.className = 'note-edit content-edit';
