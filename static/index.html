@@ -476,7 +476,11 @@ function scrollCardToTop(el) {
   } else if (body) {
     body.scrollTo({ top: body.scrollTop + r.top - body.getBoundingClientRect().top - 12, behavior: 'smooth' });
   } else {
-    window.scrollTo({ top: window.scrollY + r.top - 16, behavior: 'smooth' });
+    // 卡片在分组第一行时，连同上方的分组标题一起露出来
+    const cont = el.closest('.masonry, .gridl, .listl'), head = cont && cont.previousElementSibling;
+    const firstRow = cont && r.top - cont.getBoundingClientRect().top < 40;
+    const top = head && head.classList.contains('group') && firstRow ? head.getBoundingClientRect().top - 12 : r.top - 16;
+    window.scrollTo({ top: window.scrollY + top, behavior: 'smooth' });
   }
 }
 function setActivePane(k) {
