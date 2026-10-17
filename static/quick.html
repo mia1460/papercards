@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>新卡片</title>
+<style>
+:root {
+  --bg: #fbfaf7; --panel: #ffffff; --ink: #1f1d1a; --muted: #77716a; --line: #e6e2db;
+  --accent: #b4532a; --accent-soft: #f6e7df; --chip: #efece6;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1d1c1a; --panel: #262522; --ink: #ece8e1; --muted: #9a948b; --line: #3a3834;
+          --accent: #e08a5f; --accent-soft: #3d2d24; --chip: #33312d; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 13px/1.5 -apple-system, "PingFang SC", sans-serif;
+       padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.types { display: flex; gap: 6px; }
+.types button { flex: 1; border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+                border-radius: 6px; padding: 5px 0; font: inherit; cursor: pointer; }
+.types button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.types kbd { font-size: 10px; opacity: .6; margin-left: 4px; }
+.preview { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.preview textarea { width: 100%; border: 0; background: transparent; color: var(--ink); font: 13px/1.55 Georgia, "Songti SC", serif;
+                    resize: none; outline: none; min-height: 64px; max-height: 150px; }
+.preview img { display: block; max-width: 100%; max-height: 170px; margin: 0 auto; border-radius: 4px; }
+.source { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); min-height: 20px; }
+.source .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source .t b { color: var(--ink); font-weight: 600; }
+.source button, .actions .ghost { border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; padding: 0; }
+.srcedit { display: none; gap: 6px; flex-direction: column; }
+.srcedit.open { display: flex; }
+.row { display: flex; gap: 6px; }
+input, textarea.note { width: 100%; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+        border-radius: 6px; padding: 6px 8px; font: inherit; outline: none; }
+input:focus, textarea.note:focus { border-color: var(--accent); }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; border: 1px solid var(--line);
+        background: var(--panel); border-radius: 6px; padding: 4px 6px; }
+.tags:focus-within { border-color: var(--accent); }
+.tags input { border: 0; padding: 2px; flex: 1; min-width: 80px; background: transparent; }
+.chip { background: var(--chip); border-radius: 10px; padding: 1px 8px; font-size: 12px; cursor: pointer; }
+.chip:hover { text-decoration: line-through; }
+textarea.note { resize: none; height: 52px; }
+.actions { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); margin-top: auto; }
+.actions .sp { flex: 1; }
+.actions .save { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 6px 16px; font: inherit;
+                 font-weight: 600; cursor: pointer; }
+.spin { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--line); border-top-color: var(--accent);
+        border-radius: 50%; animation: s 0.8s linear infinite; vertical-align: -1px; }
+@keyframes s { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="types" id="types"></div>
+<div class="preview" id="preview"></div>
+<div class="source"><span class="t" id="srcText">…</span><button id="srcBtn">修改来源</button></div>
+<div class="srcedit" id="srcEdit">
+  <div class="row">
+    <input id="lookup" placeholder="粘贴 DOI / arXiv 号 / 链接，回车自动识别">
+    <input id="page" placeholder="页码" style="width:70px">
+  </div>
+  <input id="pick" list="papers" placeholder="或选择已有论文…">
+  <datalist id="papers"></datalist>
+</div>
+<div class="tags" id="tags"><input id="tagIn" list="tagList" placeholder="标签：回车添加"></div>
+<datalist id="tagList"></datalist>
+<textarea class="note" id="note" placeholder="备注（回车保存，⇧回车换行）"></textarea>
+<div class="actions">
+  <button class="ghost" id="del">丢弃 ⌘⌫</button>
+  <span class="sp"></span>
+  <span>Esc 关闭（已自动保存）</span>
+  <button class="save" id="save">保存 ⏎</button>
+</div>
+<script>
+const id = new URLSearchParams(location.search).get('id');
+const TYPES = [['quote', '摘录'], ['figure', '图表'], ['data', '数据'], ['idea', '想法']];
+let card, tags = [], papers = [];
+const $ = s => document.getElementById(s);
+const api = (p, o = {}) => fetch(p, { headers: { 'Content-Type': 'application/json' }, ...o }).then(r => r.json());
+
+function closePanel() {
+  try { window.webkit.messageHandlers.papercards.postMessage('close'); } catch (e) { window.close(); }
+}
+function cite(p) {
+  if (!p) return '';
+  const a = p.authors || [];
+  const last = s => s.trim().split(/\s+/).pop();
+  const who = a.length ? last(a[0]) + (a.length > 2 ? ' et al.' : a.length === 2 ? ' & ' + last(a[1]) : '') : '';
+  return [who, p.year].filter(Boolean).join(' ');
+}
+function renderTypes() {
+  $('types').innerHTML = TYPES.map(([k, v], i) =>
+    `<button data-k="${k}" class="${card.type === k ? 'on' : ''}">${v}<kbd>⌘${i + 1}</kbd></button>`).join('');
+  $('types').querySelectorAll('button').forEach(b => b.onclick = () => { card.type = b.dataset.k; renderTypes(); });
+}
+function renderSource() {
+  const p = card.paper;
+  let s = p ? `<b>${esc(p.title)}</b> · ${esc(cite(p))}${card.page ? ' · p.' + esc(card.page) : ''}` : '未识别到来源';
+  if (card.resolving) s += ' <span class="spin"></span>';
+  $('srcText').innerHTML = s;
+  $('srcText').title = p ? p.title : '';
+  if (!p && !$('srcEdit').classList.contains('open')) { $('srcEdit').classList.add('open'); }
+}
+function renderTags() {
+  $('tags').querySelectorAll('.chip').forEach(c => c.remove());
+  tags.forEach((t, i) => {
+    const c = document.createElement('span');
+    c.className = 'chip'; c.textContent = t; c.title = '点击删除';
+    c.onclick = () => { tags.splice(i, 1); renderTags(); };
+    $('tags').insertBefore(c, $('tagIn'));
+  });
+}
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+async function load() {
+  card = await api('/api/cards/' + id);
+  tags = card.tags || [];
+  $('preview').innerHTML = card.image
+    ? `<img src="/images/${card.image}">`
+    : `<textarea id="content"></textarea>`;
+  if (!card.image) { $('content').value = card.content || ''; }
+  $('page').value = card.page || '';
+  renderTypes(); renderSource(); renderTags();
+  $('tagIn').focus();
+  if (card.resolving) poll();
+  api('/api/tags').then(ts => $('tagList').innerHTML = ts.map(([t]) => `<option value="${esc(t)}">`).join(''));
+  papers = await api('/api/papers');
+  $('papers').innerHTML = papers.map(p => `<option value="${esc(p.title)}">${esc(cite(p))}</option>`).join('');
+}
+async function poll() {
+  for (let i = 0; i < 20 && card.resolving; i++) {
+    await new Promise(r => setTimeout(r, 700));
+    const c = await api('/api/cards/' + id);
+    card.paper = c.paper; card.resolving = c.resolving;
+    renderSource();
+  }
+}
+let newPaper;   // 通过 lookup 得到的新来源
+async function save() {
+  addTag();
+  const body = { type: card.type, tags, note: $('note').value.trim(), page: $('page').value.trim() || null };
+  if ($('content')) body.content = $('content').value;
+  if (newPaper) body.paper = newPaper;
+  else if (card._pickedId !== undefined) body.paper_id = card._pickedId;
+  await api('/api/cards/' + id, { method: 'PUT', body: JSON.stringify(body) });
+  closePanel();
+}
+function addTag() {
+  const v = $('tagIn').value.trim().replace(/^#/, '');
+  if (v && !tags.includes(v)) tags.push(v);
+  $('tagIn').value = ''; renderTags();
+  return !!v;
+}
+
+$('srcBtn').onclick = () => { $('srcEdit').classList.toggle('open'); $('lookup').focus(); };
+$('lookup').addEventListener('keydown', async e => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault(); e.stopPropagation();
+  const q = $('lookup').value.trim();
+  if (!q) return;
+  $('srcText').innerHTML = '识别中 <span class="spin"></span>';
+  const m = await api('/api/lookup?q=' + encodeURIComponent(q));
+  if (m && m.title) { newPaper = m; card.paper = m; }
+  else { newPaper = { title: q, url: q.startsWith('http') ? q : null }; card.paper = newPaper; }
+  renderSource();
+  $('tagIn').focus();
+});
+$('pick').addEventListener('change', () => {
+  const p = papers.find(p => p.title === $('pick').value);
+  if (p) { card.paper = p; card._pickedId = p.id; newPaper = null; renderSource(); }
+});
+$('pick').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && $('pick').value && !papers.find(p => p.title === $('pick').value)) {
+    e.preventDefault(); e.stopPropagation();
+    newPaper = { title: $('pick').value.trim() }; card.paper = newPaper; renderSource(); $('tagIn').focus();
+  }
+});
+$('tagIn').addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ',' || e.key === '，') && !e.isComposing) {
+    e.preventDefault(); e.stopPropagation();
+    if (!addTag() && e.key === 'Enter') save();
+  } else if (e.key === 'Backspace' && !$('tagIn').value && tags.length) { tags.pop(); renderTags(); }
+});
+$('note').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); e.stopPropagation(); save(); }
+});
+document.addEventListener('keydown', e => {
+  if (e.metaKey && (e.key === 'Backspace' || e.key === 'Delete')) { e.preventDefault(); e.stopPropagation(); discard(); }
+  else if (e.key === 'Escape') { e.preventDefault(); save(); }
+  else if (e.metaKey && e.key === 'Enter') { e.preventDefault(); save(); }
+  else if (e.metaKey && /^[1-4]$/.test(e.key)) { e.preventDefault(); card.type = TYPES[+e.key - 1][0]; renderTypes(); }
+});
+$('save').onclick = save;
+async function discard() { await api('/api/cards/' + id, { method: 'DELETE' }); closePanel(); }
+$('del').onclick = discard;
+load();
+</script>
+</body>
+</html>

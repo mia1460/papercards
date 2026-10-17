@@ -1,0 +1,5 @@
+# 个人数据（卡片数据库、截图）不进版本库
+data/
+__pycache__/
+*.pyc
+.DS_Store

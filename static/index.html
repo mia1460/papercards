@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PaperCards</title>
+<style>
+:root {
+  --bg: #f5f3ee; --panel: #ffffff; --ink: #1f1d1a; --muted: #77716a; --line: #e4dfd6;
+  --accent: #b4532a; --accent-soft: #f6e7df; --chip: #efece6;
+  --quote: #b4532a; --figure: #2f6f8f; --data: #5b7f2e; --idea: #8a5aa8;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1a1918; --panel: #252422; --ink: #ece8e1; --muted: #9a948b; --line: #383632;
+          --accent: #e08a5f; --accent-soft: #3d2d24; --chip: #33312d;
+          --quote: #e08a5f; --figure: #6db3d6; --data: #9cc56a; --idea: #c39be0; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; }
+button { font: inherit; cursor: pointer; }
+.app { display: grid; grid-template-columns: var(--side, 270px) 1fr; min-height: 100vh; }
+.resizer { position: fixed; top: 0; bottom: 0; width: 8px; margin-left: -4px; cursor: col-resize; z-index: 5; }
+.resizer:hover, .resizer.drag { background: linear-gradient(90deg, transparent 3px, var(--accent) 3px, var(--accent) 5px, transparent 5px); opacity: .6; }
+body.resizing { cursor: col-resize; user-select: none; }
+aside { border-right: 1px solid var(--line); padding: 20px 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+aside h1 { font: 600 18px/1 Georgia, "Songti SC", serif; margin: 0 0 18px; letter-spacing: .3px; }
+aside h1 span { color: var(--accent); }
+aside h2 .clear { float: right; border: 0; background: none; color: var(--accent); font-size: 11px; padding: 0; letter-spacing: 0; text-transform: none; display: none; }
+aside h2 .clear.on { display: inline; margin-left: 8px; }
+aside h2 .multi { float: right; border: 1px solid var(--line); background: none; color: var(--muted); font-size: 10px; padding: 0 6px; border-radius: 8px; letter-spacing: 0; text-transform: none; }
+aside h2 .multi.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 22px 0 8px; font-weight: 600; }
+.search { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; outline: none; }
+.search:focus { border-color: var(--accent); }
+.list { display: flex; flex-direction: column; gap: 1px; }
+.item { display: flex; gap: 8px; align-items: baseline; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.item:hover { background: var(--chip); }
+.item.on { background: var(--accent-soft); color: var(--accent); }
+.item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .n { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.item .edit { opacity: 0; border: 0; background: none; color: var(--muted); padding: 0 2px; }
+.item:hover .edit { opacity: 1; }
+.tagcloud { display: flex; flex-wrap: wrap; gap: 4px; }
+.tagcloud .chip { cursor: pointer; }
+.chip { background: var(--chip); border-radius: 10px; padding: 1px 8px; font-size: 12px; color: var(--ink); }
+.chip.on { background: var(--accent); color: #fff; }
+main { padding: 20px 28px 60px; min-width: 0; }
+.bar { display: flex; gap: 8px; align-items: center; margin-bottom: 18px; flex-wrap: wrap; }
+.seg { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+.seg button { border: 0; background: none; color: var(--muted); padding: 4px 12px; border-radius: 6px; font-size: 13px; }
+.seg button.on { background: var(--chip); color: var(--ink); font-weight: 600; }
+.bar .sp { flex: 1; }
+.bar .count { color: var(--muted); font-size: 13px; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 5px 12px; font-size: 13px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.grid { --cw: 320px; --gh: 380px; }
+.grid.size-s { --cw: 240px; --gh: 300px; } .grid.size-l { --cw: 440px; --gh: 500px; }
+.group { display: flex; align-items: baseline; gap: 8px; margin: 26px 0 12px; font: 600 15px/1.3 Georgia, "Songti SC", serif; }
+.group:first-child { margin-top: 0; }
+.group .n { font: 12px -apple-system, sans-serif; color: var(--muted); }
+.masonry { display: flex; gap: 16px; align-items: flex-start; }
+.masonry .col { flex: 1; min-width: 0; }
+.gridl { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--cw), 1fr)); gap: 16px; }
+.gridl .card { margin: 0; height: var(--gh); display: flex; flex-direction: column; }
+.gridl .card .body { flex: 1; min-height: 0; overflow: hidden; mask-image: linear-gradient(#000 85%, transparent); }
+.gridl .card img { max-height: calc(var(--gh) * 0.55); object-fit: contain; }
+.gridl .card .content.long { max-height: none; mask-image: none; }
+.masonry .card .body > img + .txt, .gridl .card .body > img + .txt { margin-top: 8px; }
+.listl { display: flex; flex-direction: column; gap: 12px; max-width: 1100px; }
+.listl .card { margin: 0; }
+.listl .card .body { display: flex; gap: 16px; align-items: flex-start; }
+.listl .card .body > img { width: var(--cw); flex: none; }
+.listl .card .txt { flex: 1; min-width: 0; }
+.listl .card .txt > .note:first-child, .listl .card .txt > .content:first-child { margin-top: 0; }
+.bar select { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 4px 8px; font: inherit; font-size: 13px; }
+.bar .lbl { font-size: 12px; color: var(--muted); }
+.card { break-inside: avoid; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 10px;
+        margin-bottom: 16px; position: relative; border-top: 3px solid var(--t); }
+.card[data-t=quote] { --t: var(--quote); } .card[data-t=figure] { --t: var(--figure); }
+.card[data-t=data] { --t: var(--data); } .card[data-t=idea] { --t: var(--idea); }
+.card .head { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+.card .type { color: var(--t); font-weight: 700; letter-spacing: .5px; }
+.card .acts { margin-left: auto; display: flex; gap: 2px; opacity: 0; transition: opacity .15s; }
+.card:hover .acts { opacity: 1; }
+.card .acts button { border: 0; background: none; color: var(--muted); font-size: 12px; padding: 2px 5px; border-radius: 4px; }
+.card .acts button:hover { background: var(--chip); color: var(--ink); }
+.card .content { font: 14.5px/1.6 Georgia, "Songti SC", serif; white-space: pre-wrap; word-break: break-word; }
+.card[data-t=data] .content { font-family: -apple-system, "PingFang SC", sans-serif; font-size: 14px; }
+.card .content.long { max-height: 260px; overflow: hidden; mask-image: linear-gradient(#000 75%, transparent); }
+.card img { display: block; width: 100%; border-radius: 6px; cursor: zoom-in; background: #fff; }
+.card .note { margin-top: 8px; font-size: 13px; color: var(--ink); background: var(--chip); border-radius: 6px; padding: 6px 8px; white-space: pre-wrap; cursor: text; }
+.card .note:hover { outline: 1px solid var(--line); }
+.card .note.add { background: none; color: var(--muted); padding: 2px 0; opacity: 0; }
+.card:hover .note.add { opacity: 1; }
+.card textarea.note-edit { display: block; width: 100%; margin-top: 8px; font: 13px/1.5 inherit; font-family: inherit; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--accent); border-radius: 6px; padding: 6px 8px; resize: vertical; min-height: 60px; outline: none; }
+.card .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.card .src { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 12px; color: var(--muted); display: flex; gap: 6px; }
+.card .src a { color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.card .src a:hover { color: var(--accent); }
+.card .src .nosrc { color: var(--accent); cursor: pointer; }
+.empty { text-align: center; color: var(--muted); padding: 80px 20px; line-height: 2; }
+.empty kbd, .help kbd { background: var(--panel); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font: 12px ui-monospace, monospace; }
+.help { font-size: 12px; color: var(--muted); line-height: 2; }
+dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); padding: 20px; width: min(560px, 92vw); }
+dialog::backdrop { background: rgba(0,0,0,.35); }
+dialog h3 { margin: 0 0 14px; font-size: 16px; }
+dialog label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+dialog input, dialog textarea, dialog select { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; }
+dialog textarea { resize: vertical; min-height: 70px; }
+dialog .row { display: flex; gap: 10px; } dialog .row > * { flex: 1; }
+dialog .foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+dialog img { max-width: 100%; max-height: 220px; display: block; margin: 0 auto; border-radius: 6px; }
+.lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.8); display: none; align-items: center; justify-content: center; z-index: 10; cursor: zoom-out; }
+.lightbox.on { display: flex; } .lightbox img { max-width: 94vw; max-height: 94vh; background: #fff; border-radius: 6px; }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.on { opacity: 1; }
+@media (max-width: 760px) { .listl .card .body { flex-direction: column; } .listl .card .body > img { width: 100%; } }
+@media (max-width: 760px) { .resizer { display: none; } .app { grid-template-columns: 1fr; } aside { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); } main { padding: 16px; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <h1>Paper<span>Cards</span></h1>
+    <input class="search" id="q" placeholder="搜索内容、备注、标签、论文…">
+    <h2>来源 <button class="clear" id="clearSel" title="清除来源筛选">全部</button><button class="multi" id="multiSel" title="开启后点击可同时选多个来源（单选模式下 ⌘ 点击也可多选）">多选</button></h2>
+    <div class="list" id="papers"></div>
+    <h2>标签</h2>
+    <div class="tagcloud" id="tags"></div>
+    <h2>快捷键</h2>
+    <div class="help">
+      <kbd>⌃⌥⌘C</kbd> 收集选中文字<br>
+      <kbd>⌃⌥⌘S</kbd> 截图收集图表<br>
+      <kbd>⌃⌥⌘R</kbd> 按上次区域一键截图<br>
+      <kbd>⌃⌥⌘A</kbd> 自动截图（换页就截）<br>
+      <kbd>⌃⌥⌘V</kbd> 收集剪贴板（Snipaste 截图后）<br>
+      <kbd>⌃⌥⌘P</kbd> 打开卡片墙<br>
+      在本页 <kbd>⌘V</kbd> 粘贴图片/文字新建
+    </div>
+  </aside>
+  <div class="resizer" id="resizer" title="拖动调整左栏宽度，双击恢复默认"></div>
+  <main>
+    <div class="bar">
+      <div class="seg" id="types"></div>
+      <span class="count" id="count"></span>
+      <select id="group" title="分组">
+        <option value="">不分组</option><option value="paper">按来源分组</option><option value="type">按类型分组</option>
+      </select>
+      <select id="sort" title="排序">
+        <option value="new">最新在前</option><option value="old">最早在前</option>
+      </select>
+      <div class="seg" id="layout"></div>
+      <div class="seg" id="size"></div>
+      <span class="sp"></span>
+      <button class="btn" id="exportBtn">导出 Markdown（zip）</button>
+      <button class="btn primary" id="newBtn">+ 新卡片</button>
+    </div>
+    <div class="grid" id="grid"></div>
+  </main>
+</div>
+
+<dialog id="cardDlg">
+  <h3 id="cardDlgTitle">编辑卡片</h3>
+  <div id="dImg"></div>
+  <div class="row">
+    <div><label>类型</label><select id="dType"><option value="quote">摘录</option><option value="figure">图表</option><option value="data">数据</option><option value="idea">想法</option></select></div>
+    <div><label>页码</label><input id="dPage"></div>
+  </div>
+  <label>内容</label><textarea id="dContent"></textarea>
+  <label>备注</label><textarea id="dNote" style="min-height:50px"></textarea>
+  <label>标签（逗号分隔）</label><input id="dTags">
+  <label>来源</label>
+  <select id="dPaperSel"></select>
+  <input id="dPaperNew" placeholder="输入 DOI / arXiv 号 / 链接（自动识别），或直接写标题" style="display:none;margin-top:6px">
+  <div class="foot"><button class="btn" id="dCancel">取消</button><button class="btn primary" id="dSave">保存</button></div>
+</dialog>
+
+<dialog id="paperDlg">
+  <h3>编辑论文信息</h3>
+  <label>标题</label><input id="pTitle">
+  <label>作者（逗号分隔）</label><input id="pAuthors">
+  <div class="row"><div><label>年份</label><input id="pYear"></div><div><label>会议/期刊</label><input id="pVenue"></div></div>
+  <label>DOI</label><input id="pDoi">
+  <label>链接</label><input id="pUrl">
+  <div class="foot"><button class="btn" id="pBib">复制 BibTeX</button><span style="flex:1"></span><button class="btn" id="pCancel">取消</button><button class="btn primary" id="pSave">保存</button></div>
+</dialog>
+
+<div class="lightbox" id="lightbox"><img></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const TYPES = { quote: '摘录', figure: '图表', data: '数据', idea: '想法' };
+const S = { cards: [], papers: [], tags: [], type: '', sel: new Set(), tag: null, q: '', sort: 'new', group: '', multi: false, layout: 'masonry', size: 'm' };
+const LAYOUTS = { masonry: '瀑布流', grid: '网格', list: '列表' };
+const SIZES = { s: '小', m: '中', l: '大' };
+try { Object.assign(S, JSON.parse(localStorage.getItem('papercards.view') || '{}')); } catch (e) {}
+for (const [k, v] of new URLSearchParams(location.search)) if (['sort', 'group', 'layout', 'size'].includes(k)) S[k] = v;
+if (S.sort === 'paper' || S.sort === 'type') { S.group = S.sort; S.sort = 'new'; }   // 兼容旧的保存值
+function saveView() { try { localStorage.setItem('papercards.view', JSON.stringify({ multi: S.multi, sort: S.sort, group: S.group, layout: S.layout, size: S.size })); } catch (e) {} }
+const $ = s => document.getElementById(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const api = (p, o = {}) => fetch(p, { headers: { 'Content-Type': 'application/json' }, ...o }).then(r => r.json());
+const last = s => s.trim().split(/\s+/).pop();
+function cite(p) {
+  if (!p) return '';
+  const a = p.authors || [];
+  const who = a.length ? last(a[0]) + (a.length > 2 ? ' et al.' : a.length === 2 ? ' & ' + last(a[1]) : '') : '';
+  return [who, p.year].filter(Boolean).join(', ');
+}
+function fmtTime(t) {
+  const d = new Date(t * 1000), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 1600); }
+function srcLink(c) {
+  const p = c.paper;
+  const lib = (p && p.zotero_lib) || 'library';
+  if (c.att_key) return `zotero://open-pdf/${lib}/items/${c.att_key}${c.page ? '?page=' + c.page : ''}`;
+  if (c.src_url) return c.src_url;
+  if (p && p.zotero_key) return `zotero://select/${lib}/items/${p.zotero_key}`;
+  return p && p.url;
+}
+
+async function load() {
+  [S.cards, S.papers, S.tags] = await Promise.all([api('/api/cards'), api('/api/papers'), api('/api/tags')]);
+  render();
+}
+function filtered() {
+  const q = S.q.toLowerCase();
+  return S.cards.filter(c =>
+    (!S.type || c.type === S.type) &&
+    (!S.sel.size || S.sel.has(c.paper_id || 0)) &&
+    (!S.tag || c.tags.includes(S.tag)) &&
+    (!q || [c.content, c.note, c.tags.join(' '), c.paper && c.paper.title, c.paper && c.paper.authors.join(' ')].join(' ').toLowerCase().includes(q)));
+}
+function render() {
+  $('types').innerHTML = [['', '全部'], ...Object.entries(TYPES)].map(([k, v]) =>
+    `<button data-k="${k}" class="${S.type === k ? 'on' : ''}">${v}</button>`).join('');
+  $('types').querySelectorAll('button').forEach(b => b.onclick = () => { S.type = b.dataset.k; render(); });
+
+  const unsorted = S.cards.filter(c => !c.paper_id).length;
+  $('papers').innerHTML = S.papers.filter(p => p.n).map(p =>
+    `<div class="item ${S.sel.has(p.id) ? 'on' : ''}" data-id="${p.id}" title="${esc(p.title)}">
+       <span class="name">${esc(p.title)}</span><button class="edit" data-edit="${p.id}" title="编辑论文信息">✎</button><span class="n">${p.n}</span></div>`).join('')
+    + (unsorted ? `<div class="item ${S.sel.has(0) ? 'on' : ''}" data-id="0"><span class="name" style="color:var(--accent)">未标注来源</span><span class="n">${unsorted}</span></div>` : '');
+  $('multiSel').classList.toggle('on', S.multi);
+  $('clearSel').classList.toggle('on', S.sel.size > 1);   // 只有多选（选了不止一个）时才显示
+  $('clearSel').textContent = `已选 ${S.sel.size} · 清除`;
+  $('papers').querySelectorAll('.item').forEach(el => el.onclick = e => {
+    if (e.target.dataset.edit) return editPaper(+e.target.dataset.edit);
+    const id = +el.dataset.id;
+    if (S.multi || e.metaKey) S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id);   // 多选：切换
+    else if (S.sel.size === 1 && S.sel.has(id)) S.sel.clear();                      // 单选：再点取消
+    else S.sel = new Set([id]);                                                     // 单选：只选这个
+    render();
+  });
+  $('tags').innerHTML = S.tags.map(([t, n]) => `<span class="chip ${S.tag === t ? 'on' : ''}" data-t="${esc(t)}">${esc(t)} ${n}</span>`).join('') || '<span class="help">还没有标签</span>';
+  $('tags').querySelectorAll('.chip').forEach(el => el.onclick = () => { S.tag = S.tag === el.dataset.t ? null : el.dataset.t; render(); });
+  $('dPaperSel').innerHTML = '<option value="">（无来源）</option>'
+    + S.papers.map(p => `<option value="${p.id}">${esc(p.title)}${cite(p) ? ' — ' + esc(cite(p)) : ''}</option>`).join('')
+    + '<option value="__new">＋ 新来源…</option>';
+
+  const cards = filtered();
+  $('count').textContent = `${cards.length} 张卡片`;
+  $('sort').value = S.sort;
+  $('group').value = S.group;
+  $('layout').innerHTML = Object.entries(LAYOUTS).map(([k, v]) => `<button data-k="${k}" class="${S.layout === k ? 'on' : ''}">${v}</button>`).join('');
+  $('size').innerHTML = Object.entries(SIZES).map(([k, v]) => `<button data-k="${k}" class="${S.size === k ? 'on' : ''}" title="卡片大小">${v}</button>`).join('');
+  $('grid').className = 'grid size-' + S.size;
+  if (!S.cards.length) {
+    $('grid').innerHTML = `<div class="empty">还没有卡片。<br>在 Zotero 或 Chrome 里选中一段文字，按 <kbd>⌃⌥⌘C</kbd>；<br>想收集图表，按 <kbd>⌃⌥⌘S</kbd> 框选截图。</div>`;
+    return;
+  }
+  if (!cards.length) { $('grid').innerHTML = '<div class="empty">没有匹配的卡片</div>'; return; }
+  $('grid').innerHTML = groupCards(cards).map(g =>
+    (g.title ? `<div class="group">${esc(g.title)}<span class="n">${g.cards.length} 张</span></div>` : '') + layoutHTML(g.cards)).join('');
+}
+
+function sortCards(cards) {
+  const byTime = (a, b) => S.sort === 'old' ? a.created_at - b.created_at : b.created_at - a.created_at;
+  return [...cards].sort(byTime);
+}
+function groupCards(cards) {
+  cards = sortCards(cards);
+  if (S.group === 'paper') {
+    const m = new Map();
+    for (const c of cards) {
+      const k = c.paper ? c.paper.title : '未标注来源';
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(c);
+    }
+    return [...m].sort((a, b) => (a[0] === '未标注来源') - (b[0] === '未标注来源')).map(([title, cards]) => ({ title, cards }));
+  }
+  if (S.group === 'type') {
+    return Object.entries(TYPES).map(([k, v]) => ({ title: v, cards: cards.filter(c => c.type === k) })).filter(g => g.cards.length);
+  }
+  return [{ title: '', cards }];
+}
+function layoutHTML(cards) {
+  if (S.layout === 'grid') return `<div class="gridl">${cards.map(cardHTML).join('')}</div>`;
+  if (S.layout === 'list') return `<div class="listl">${cards.map(cardHTML).join('')}</div>`;
+  // 瀑布流：按顺序轮流放进各列，保证从左到右阅读顺序和排序一致
+  const cw = { s: 240, m: 320, l: 440 }[S.size];
+  const n = Math.max(1, Math.floor(($('grid').clientWidth + 16) / (cw + 16)));
+  const cols = Array.from({ length: n }, () => []);
+  cards.forEach((c, i) => cols[i % n].push(cardHTML(c)));
+  return `<div class="masonry">${cols.map(col => `<div class="col">${col.join('')}</div>`).join('')}</div>`;
+}
+function cardHTML(c) {
+  const link = srcLink(c);
+  const src = c.paper
+    ? `<a href="${esc(link || '#')}" title="${esc(c.paper.title)}">${esc(cite(c.paper))}${c.page ? ', p. ' + esc(c.page) : ''} · ${esc(c.paper.title)}</a>`
+    : `<span class="nosrc" data-act="edit">+ 添加来源</span>`;
+  return `<div class="card" data-t="${c.type}" data-id="${c.id}">
+    <div class="head"><span class="type">${TYPES[c.type] || c.type}</span><span title="创建时间">${fmtTime(c.created_at)}</span>
+      <span class="acts"><button data-act="copy" title="复制为带引用的 Markdown">复制</button><button data-act="edit">编辑</button><button data-act="del">删除</button></span></div>
+    <div class="body">
+      ${c.image ? `<img src="/images/${c.image}" loading="lazy" data-act="zoom">` : ''}
+      <div class="txt">
+        ${c.content ? `<div class="content ${c.content.length > 500 ? 'long' : ''}" ${c.content.length > 500 ? 'data-act="expand"' : ''}>${esc(c.content)}</div>` : ''}
+        ${c.note ? `<div class="note" data-act="note" title="点击编辑">${esc(c.note)}</div>` : `<div class="note add" data-act="note">+ 备注</div>`}
+        ${c.tags.length ? `<div class="tags">${c.tags.map(t => `<span class="chip">#${esc(t)}</span>`).join('')}</div>` : ''}
+      </div>
+    </div>
+    <div class="src">${src}</div></div>`;
+}
+
+// 拖动调整左栏宽度（记住宽度，双击恢复默认）
+function setSide(w) {
+  w = Math.max(200, Math.min(600, w));
+  document.querySelector('.app').style.setProperty('--side', w + 'px');
+  $('resizer').style.left = w + 'px';
+  return w;
+}
+try { setSide(+localStorage.getItem('papercards.side') || 270); } catch (e) { setSide(270); }
+$('resizer').addEventListener('mousedown', e => {
+  e.preventDefault();
+  $('resizer').classList.add('drag'); document.body.classList.add('resizing');
+  let w;
+  const move = ev => { w = setSide(ev.clientX); };
+  const up = () => {
+    document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
+    $('resizer').classList.remove('drag'); document.body.classList.remove('resizing');
+    try { if (w) localStorage.setItem('papercards.side', w); } catch (e) {}
+    if (S.layout === 'masonry') render();
+  };
+  document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+});
+$('resizer').addEventListener('dblclick', () => { setSide(270); try { localStorage.removeItem('papercards.side'); } catch (e) {} render(); });
+
+$('clearSel').onclick = () => { S.sel.clear(); render(); };
+$('multiSel').onclick = () => {
+  S.multi = !S.multi;
+  if (!S.multi && S.sel.size > 1) S.sel = new Set([[...S.sel][0]]);   // 切回单选只保留一个
+  saveView(); render();
+};
+$('sort').onchange = e => { S.sort = e.target.value; saveView(); render(); };
+$('group').onchange = e => { S.group = e.target.value; saveView(); render(); };
+$('layout').onclick = e => { const k = e.target.dataset.k; if (k) { S.layout = k; saveView(); render(); } };
+$('size').onclick = e => { const k = e.target.dataset.k; if (k) { S.size = k; saveView(); render(); } };
+let resizeTimer;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (S.layout === 'masonry' && !document.querySelector('.note-edit')) render(); }, 150); });
+
+$('grid').addEventListener('click', async e => {
+  const act = e.target.dataset.act;
+  if (!act) return;
+  const el = e.target.closest('.card'), c = S.cards.find(x => x.id === +el.dataset.id);
+  if (act === 'zoom') { $('lightbox').querySelector('img').src = e.target.src; $('lightbox').classList.add('on'); }
+  if (act === 'expand') e.target.classList.remove('long');
+  if (act === 'note') editNote(e.target, c);
+  if (act === 'edit') openCard(c);
+  if (act === 'del' && confirm('删除这张卡片？')) { await api('/api/cards/' + c.id, { method: 'DELETE' }); load(); }
+  if (act === 'copy') {
+    const loc = c.paper ? ` (${cite(c.paper)}${c.page ? ', p. ' + c.page : ''})` : '';
+    const parts = [];
+    if (c.image) parts.push(`![](${location.origin}/images/${c.image})`);
+    if (c.content) parts.push(c.content.split('\n').map(l => '> ' + l).join('\n') + loc);
+    else if (loc) parts.push(loc.trim());
+    if (c.note) parts.push(c.note);
+    await navigator.clipboard.writeText(parts.join('\n\n'));
+    toast('已复制');
+  }
+});
+// 点击备注直接编辑：失焦或回车保存，⇧回车换行，Esc 取消
+function editNote(el, c) {
+  const ta = document.createElement('textarea');
+  ta.className = 'note-edit';
+  ta.value = c.note || '';
+  ta.placeholder = '备注（回车保存，⇧回车换行，Esc 取消）';
+  el.replaceWith(ta);
+  ta.style.height = Math.max(60, ta.scrollHeight + 2) + 'px';
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  let done = false;
+  const finish = async save => {
+    if (done) return; done = true;
+    const v = ta.value.trim();
+    if (save && v !== (c.note || '')) {
+      c.note = v;
+      await api('/api/cards/' + c.id, { method: 'PUT', body: JSON.stringify({ note: v }) });
+    }
+    render();
+  };
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); finish(true); }
+    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  ta.addEventListener('blur', () => finish(true));
+}
+$('lightbox').onclick = () => $('lightbox').classList.remove('on');
+$('q').oninput = e => { S.q = e.target.value; render(); };
+
+// ---- 卡片编辑 / 新建
+let editing = null;
+function openCard(c) {
+  // 手动新建默认用当前筛选的类型，没筛选时默认「想法」
+  editing = c || { type: S.type || 'idea', content: '', note: '', tags: [], paper: null };
+  $('cardDlgTitle').textContent = c && c.id ? '编辑卡片' : '新卡片';
+  $('dImg').innerHTML = editing.image ? `<img src="/images/${editing.image}">` : '';
+  $('dType').value = editing.type;
+  $('dPage').value = editing.page || '';
+  $('dContent').value = editing.content || '';
+  $('dNote').value = editing.note || '';
+  $('dTags').value = editing.tags.join(', ');
+  const pid = editing.paper ? editing.paper.id : (S.sel.size === 1 ? [...S.sel][0] : '');
+  $('dPaperSel').value = pid ? String(pid) : '';
+  $('dPaperNew').value = '';
+  $('dPaperNew').style.display = 'none';
+  $('cardDlg').showModal();
+  (editing.image || editing.content ? $('dNote') : $('dContent')).focus();
+}
+$('dCancel').onclick = () => $('cardDlg').close();
+$('dSave').onclick = async () => {
+  const body = {
+    type: $('dType').value, page: $('dPage').value.trim() || null, content: $('dContent').value,
+    note: $('dNote').value.trim(), tags: $('dTags').value.split(/[,，]/).map(s => s.trim().replace(/^#/, '')).filter(Boolean),
+    image: editing.image || null,
+  };
+  const sel = $('dPaperSel').value, ptxt = $('dPaperNew').value.trim();
+  if (sel !== '__new') body.paper_id = sel ? +sel : null;
+  else if (ptxt) {
+    $('dSave').textContent = '识别来源…';
+    const m = /^(10\.|https?:|arxiv:|\d{4}\.\d{4,5})/i.test(ptxt) ? await api('/api/lookup?q=' + encodeURIComponent(ptxt)) : null;
+    body.paper = m && m.title ? m : { title: ptxt };
+    $('dSave').textContent = '保存';
+  }
+  const saved = editing.id
+    ? await api('/api/cards/' + editing.id, { method: 'PUT', body: JSON.stringify(body) })
+    : await api('/api/cards', { method: 'POST', body: JSON.stringify(body) });
+  $('cardDlg').close();
+  await load();
+  if (saved && saved.id && !filtered().some(c => c.id === saved.id)) toast('已保存，但被当前筛选条件隐藏了');
+  else toast('已保存');
+};
+$('newBtn').onclick = () => openCard();
+$('dPaperSel').onchange = () => {
+  const isNew = $('dPaperSel').value === '__new';
+  $('dPaperNew').style.display = isNew ? '' : 'none';
+  if (isNew) $('dPaperNew').focus();
+};
+
+// 在卡片墙上直接粘贴图片或文字
+document.addEventListener('paste', async e => {
+  if (e.target.closest('input, textarea') || $('cardDlg').open) return;
+  const items = [...e.clipboardData.items];
+  const img = items.find(i => i.type.startsWith('image/'));
+  if (img) {
+    const r = await fetch('/api/upload', { method: 'POST', body: img.getAsFile() }).then(r => r.json());
+    openCard({ type: 'figure', content: '', note: '', tags: [], image: r.image, paper: null });
+  } else {
+    const text = e.clipboardData.getData('text/plain');
+    if (text) openCard({ type: 'quote', content: text, note: '', tags: [], paper: null });
+  }
+});
+
+// ---- 论文编辑
+let paperEditing = null;
+function editPaper(id) {
+  const p = paperEditing = S.papers.find(p => p.id === id);
+  $('pTitle').value = p.title || ''; $('pAuthors').value = (p.authors || []).join(', ');
+  $('pYear').value = p.year || ''; $('pVenue').value = p.venue || ''; $('pDoi').value = p.doi || ''; $('pUrl').value = p.url || '';
+  $('paperDlg').showModal();
+}
+$('pCancel').onclick = () => $('paperDlg').close();
+$('pSave').onclick = async () => {
+  await api('/api/papers/' + paperEditing.id, { method: 'PUT', body: JSON.stringify({
+    title: $('pTitle').value.trim(), authors: $('pAuthors').value.split(/[,，]/).map(s => s.trim()).filter(Boolean),
+    year: $('pYear').value.trim(), venue: $('pVenue').value.trim(), doi: $('pDoi').value.trim(), url: $('pUrl').value.trim() }) });
+  $('paperDlg').close(); load();
+};
+$('pBib').onclick = async () => {
+  const t = await fetch(`/api/papers/${paperEditing.id}/bibtex`).then(r => r.text());
+  await navigator.clipboard.writeText(t); toast('BibTeX 已复制');
+};
+
+$('exportBtn').onclick = () => {
+  const ids = filtered().map(c => c.id).join(',');
+  if (!ids) return toast('没有可导出的卡片');
+  location.href = '/api/export?ids=' + ids;
+};
+
+load();
+window.addEventListener('focus', load);
+setInterval(() => { if (!document.hidden && !document.querySelector('dialog[open], .note-edit')) load(); }, 5000);
+</script>
+</body>
+</html>
