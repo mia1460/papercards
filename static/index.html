@@ -455,7 +455,20 @@ function markCurrent(scroll) {
   const el = scope && scope.querySelector(`.card[data-id="${id}"]`);
   if (!el) return;
   el.classList.add('cur');
-  if (scroll) el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+  if (scroll) scrollCardToTop(el);
+}
+// 把卡片贴到所在区（或页面）的顶端；左右翻页的区则贴到最左边
+function scrollCardToTop(el) {
+  const body = el.closest('.pbody'), r = el.getBoundingClientRect();
+  if (body && body.classList.contains('h')) {
+    const cell = el.closest('.hcell'), br = body.getBoundingClientRect();
+    body.scrollTo({ left: body.scrollLeft + cell.getBoundingClientRect().left - br.left - 12, behavior: 'smooth' });
+    cell.scrollTo({ top: 0, behavior: 'smooth' });
+  } else if (body) {
+    body.scrollTo({ top: body.scrollTop + r.top - body.getBoundingClientRect().top - 12, behavior: 'smooth' });
+  } else {
+    window.scrollTo({ top: window.scrollY + r.top - 16, behavior: 'smooth' });
+  }
 }
 function setActivePane(k) {
   if (S.layout !== 'quad' || k === activePaneKey) return;
