@@ -28,6 +28,10 @@ aside h1 span { color: var(--accent); }
 aside h2 .clear { float: right; border: 0; background: none; color: var(--accent); font-size: 11px; padding: 0; letter-spacing: 0; text-transform: none; display: none; }
 aside h2 .clear.on { display: inline; margin-left: 8px; }
 aside h2 .multi { float: right; border: 1px solid var(--line); background: none; color: var(--muted); font-size: 10px; padding: 0 6px; border-radius: 8px; letter-spacing: 0; text-transform: none; }
+.tagmode { display: none; margin: -2px 0 8px; font-size: 11px; background: var(--chip); border-radius: 8px; padding: 2px; width: max-content; }
+.tagmode.on { display: flex; }
+.tagmode button { border: 0; background: none; color: var(--muted); padding: 1px 10px; border-radius: 6px; font-size: 11px; }
+.tagmode button.on { background: var(--panel); color: var(--ink); font-weight: 600; }
 aside h2 .multi.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 22px 0 8px; font-weight: 600; }
 .search { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; outline: none; }
@@ -75,7 +79,19 @@ main { padding: 20px 28px 60px; min-width: 0; }
 .masonry { display: flex; gap: 16px; align-items: flex-start; }
 body.quad-mode main { height: 100vh; display: flex; flex-direction: column; padding-bottom: 20px; overflow: hidden; }
 body.quad-mode .grid { flex: 1; min-height: 0; }
-.quad { height: 100%; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 14px; }
+.quad { height: 100%; display: flex; }
+.qcol { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex-grow: 0; flex-shrink: 0; }
+.qcol[data-side=right] { flex-grow: 1; flex-shrink: 1; }
+.qcell { min-height: 0; display: flex; flex-grow: 0; flex-shrink: 0; }
+.qcell:last-child { flex-grow: 1; flex-shrink: 1; }
+.qcell .pane { flex: 1; }
+.qsplit { flex: none; position: relative; z-index: 2; }
+.qsplit.v { width: 14px; cursor: col-resize; }
+.qsplit.h { height: 14px; cursor: row-resize; }
+.qsplit::after { content: ''; position: absolute; border-radius: 2px; background: var(--accent); opacity: 0; transition: opacity .15s; }
+.qsplit.v::after { left: 6px; width: 2px; top: 0; bottom: 0; }
+.qsplit.h::after { top: 6px; height: 2px; left: 0; right: 0; }
+.qsplit:hover::after, .qsplit.drag::after { opacity: .6; }
 .pane { min-height: 0; min-width: 0; display: flex; flex-direction: column; background: rgba(0,0,0,.025); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .pane[data-t=quote] { --t: var(--quote); } .pane[data-t=figure] { --t: var(--figure); }
 .pane[data-t=data] { --t: var(--data); } .pane[data-t=idea] { --t: var(--idea); }
@@ -83,8 +99,17 @@ body.quad-mode .grid { flex: 1; min-height: 0; }
 .pane header .type { color: var(--t); font-weight: 700; } .pane header .n { color: var(--muted); font-size: 12px; }
 .pane.focus { box-shadow: 0 0 0 2px var(--t); }
 .pbody { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; overscroll-behavior: contain; }
+.pane header .pager { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.pane header .pager button { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 0 8px; line-height: 20px; font-size: 13px; }
+.pane header .pager button:hover { border-color: var(--t); color: var(--t); }
+.pane header .pager .pg { min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+.pane header .pager .pmode { font-size: 11px; margin-left: 6px; color: var(--muted); }
+.pane header .pager .pmode.on { color: var(--t); border-color: var(--t); }
+.pbody.h { display: flex; gap: 12px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; align-items: stretch; }
+.pbody.h .hcell { flex: 0 0 calc((100% - (var(--hn, 1) - 1) * 12px) / var(--hn, 1)); max-height: 100%; overflow-y: auto; scroll-snap-align: start; overscroll-behavior: contain; }
+.pbody.h .hcell .card { margin: 0; }
 .pempty { color: var(--muted); text-align: center; padding: 40px 0; font-size: 13px; }
-@media (max-width: 760px) { body.quad-mode main { height: auto; overflow: visible; } .quad { grid-template-columns: 1fr; grid-template-rows: none; } .pane { height: 70vh; } }
+@media (max-width: 760px) { body.quad-mode main { height: auto; overflow: visible; } .quad, .qcol { display: block; } .qsplit { display: none; } .qcell { display: block; margin-bottom: 14px; } .pane { height: 70vh; } }
 .masonry .col { flex: 1; min-width: 0; }
 .gridl { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--cw), 1fr)); gap: 16px; }
 .gridl .card { margin: 0; height: var(--gh); display: flex; flex-direction: column; }
@@ -154,7 +179,8 @@ dialog img { max-width: 100%; max-height: 220px; display: block; margin: 0 auto;
     <input class="search" id="q" placeholder="搜索内容、备注、标签、论文…">
     <h2>来源 <button class="clear" id="clearSel" title="清除来源筛选">全部</button><button class="multi" id="multiSel" title="开启后点击可同时选多个来源（单选模式下 ⌘ 点击也可多选）">多选</button></h2>
     <div class="list" id="papers"></div>
-    <h2>标签</h2>
+    <h2>标签 <button class="clear" id="clearTag" title="清除标签筛选"></button><button class="multi" id="tagMultiBtn" title="开启后点击可同时选多个标签（单选模式下 ⌘ 点击也可多选）">多选</button></h2>
+    <div class="tagmode" id="tagMode"><button data-m="any">任一</button><button data-m="all">全部</button></div>
     <div class="tagcloud" id="tags"></div>
     <h2>快捷键</h2>
     <div class="help">
@@ -228,13 +254,21 @@ try {
 } catch (e) {}
 const orderedTypes = () => typeOrder.map(k => [k, TYPES[k]]);
 function saveTypeOrder() { try { localStorage.setItem('papercards.typeOrder', JSON.stringify(typeOrder)); } catch (e) {} }
-const S = { cards: [], papers: [], tags: [], type: '', sel: new Set(), tag: null, q: '', sort: 'new', group: '', multi: false, layout: 'masonry', size: 'm' };
+const S = { cards: [], papers: [], tags: [], type: '', sel: new Set(), tagSel: new Set(), tagMulti: false, tagAll: false, paneMode: {}, quadRatio: { col: 50, left: 50, right: 50 }, q: '', sort: 'new', group: '', multi: false, layout: 'masonry', size: 'm' };
 const LAYOUTS = { masonry: '瀑布流', grid: '网格', list: '列表', quad: '四分' };
 const SIZES = { s: '小', m: '中', l: '大' };
 try { Object.assign(S, JSON.parse(localStorage.getItem('papercards.view') || '{}')); } catch (e) {}
 for (const [k, v] of new URLSearchParams(location.search)) if (['sort', 'group', 'layout', 'size'].includes(k)) S[k] = v;
 if (S.sort === 'paper' || S.sort === 'type') { S.group = S.sort; S.sort = 'new'; }   // 兼容旧的保存值
-function saveView() { try { localStorage.setItem('papercards.view', JSON.stringify({ multi: S.multi, sort: S.sort, group: S.group, layout: S.layout, size: S.size })); } catch (e) {} }
+// URL 里还可以带：sources=1,2（来源 id）、tags=a,b（标签）、h=figure,data（这些四分区用左右翻页）、q=60,70,40（四分比例：左列宽%、左列上区高%、右列上区高%）
+{
+  const u = new URLSearchParams(location.search);
+  if (u.get('sources')) S.sel = new Set(u.get('sources').split(',').map(Number));
+  if (u.get('tags')) S.tagSel = new Set(u.get('tags').split(','));
+  if (u.get('q')) { const [col, left, right] = u.get('q').split(',').map(Number); S.quadRatio = { col: col || 50, left: left || 50, right: right || 50 }; }
+  if (u.get('h')) u.get('h').split(',').forEach(k => { S.paneMode = { ...S.paneMode, [k]: 'h' }; });
+}
+function saveView() { try { localStorage.setItem('papercards.view', JSON.stringify({ quadRatio: S.quadRatio, tagMulti: S.tagMulti, tagAll: S.tagAll, paneMode: S.paneMode, multi: S.multi, sort: S.sort, group: S.group, layout: S.layout, size: S.size })); } catch (e) {} }
 const $ = s => document.getElementById(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const api = (p, o = {}) => fetch(p, { headers: { 'Content-Type': 'application/json' }, ...o }).then(r => r.json());
@@ -268,7 +302,7 @@ function filtered(ignoreType) {
   return S.cards.filter(c =>
     (ignoreType || !S.type || c.type === S.type) &&
     (!S.sel.size || S.sel.has(c.paper_id || 0)) &&
-    (!S.tag || c.tags.includes(S.tag)) &&
+    (!S.tagSel.size || (S.tagAll ? [...S.tagSel].every(t => c.tags.includes(t)) : c.tags.some(t => S.tagSel.has(t)))) &&
     (!q || [c.content, c.note, c.tags.join(' '), c.paper && c.paper.title, c.paper && c.paper.authors.join(' ')].join(' ').toLowerCase().includes(q)));
 }
 function render() {
@@ -293,11 +327,27 @@ function render() {
     else S.sel = new Set([id]);                                                     // 单选：只选这个
     render();
   });
-  $('tags').innerHTML = S.tags.map(([t, n]) => `<span class="chip ${S.tag === t ? 'on' : ''}" data-t="${esc(t)}">${esc(t)} ${n}<span class="ed" title="重命名 / 合并 / 删除">✎</span></span>`).join('') || '<span class="help">还没有标签</span>';
+  // 标签列表只统计所选来源下的卡片；已选中的标签即使数量为 0 也保留，方便取消
+  const counts = new Map();
+  S.cards.filter(c => !S.sel.size || S.sel.has(c.paper_id || 0))
+    .forEach(c => c.tags.forEach(t => counts.set(t, (counts.get(t) || 0) + 1)));
+  S.tagSel.forEach(t => { if (!counts.has(t)) counts.set(t, 0); });
+  const tagList = [...counts].sort((a, b) => b[1] - a[1]);
+  $('tags').innerHTML = tagList.map(([t, n]) => `<span class="chip ${S.tagSel.has(t) ? 'on' : ''}" data-t="${esc(t)}">${esc(t)} ${n}<span class="ed" title="重命名 / 合并 / 删除">✎</span></span>`).join('')
+    || `<span class="help">${S.sel.size ? '所选来源下没有标签' : '还没有标签'}</span>`;
   $('tags').querySelectorAll('.chip').forEach(el => el.onclick = e => {
     if (e.target.classList.contains('ed')) return manageTag(el.dataset.t);
-    S.tag = S.tag === el.dataset.t ? null : el.dataset.t; render();
+    const t = el.dataset.t;
+    if (S.tagMulti || e.metaKey) S.tagSel.has(t) ? S.tagSel.delete(t) : S.tagSel.add(t);
+    else if (S.tagSel.size === 1 && S.tagSel.has(t)) S.tagSel.clear();
+    else S.tagSel = new Set([t]);
+    render();
   });
+  $('tagMultiBtn').classList.toggle('on', S.tagMulti);
+  $('clearTag').classList.toggle('on', S.tagSel.size > 1);
+  $('clearTag').textContent = `已选 ${S.tagSel.size} · 清除`;
+  $('tagMode').classList.toggle('on', S.tagSel.size > 1);
+  $('tagMode').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.m === 'all') === S.tagAll));
   $('tagSuggest').innerHTML = S.tags.map(([t]) => `<option value="${esc(t)}">`).join('');
   $('dPaperSel').innerHTML = '<option value="">（无来源）</option>'
     + S.papers.map(p => `<option value="${p.id}">${esc(p.title)}${cite(p) ? ' — ' + esc(cite(p)) : ''}</option>`).join('')
@@ -345,19 +395,106 @@ function groupCards(cards) {
 // 四分布局：每种类型一个区，各自独立滚动；刷新时保留每个区的滚动位置
 function renderQuad() {
   const keep = {};
-  $('grid').querySelectorAll('.pbody').forEach(el => { keep[el.dataset.t] = el.scrollTop; });
+  $('grid').querySelectorAll('.pbody').forEach(el => { keep[el.dataset.t] = [el.scrollTop, el.scrollLeft]; });
   const all = sortCards(filtered(true));
   $('count').textContent = `${all.length} 张卡片`;
-  const paneW = ($('grid').clientWidth - 14) / 2 - 24;
-  $('grid').innerHTML = `<div class="quad">${orderedTypes().map(([k, v]) => {
+  const R = S.quadRatio, ord = orderedTypes();
+  const paneHTML = ([k, v], w) => {
     const cs = all.filter(c => c.type === k);
+    const h = S.paneMode[k] === 'h';
+    const body = !cs.length ? '<div class="pempty">暂无</div>'
+      : h ? cs.map(c => `<div class="hcell">${cardHTML(c)}</div>`).join('') : masonryHTML(cs, w);
     return `<section class="pane ${S.type === k ? 'focus' : ''}" data-t="${k}">
-      <header><span class="type">${v}</span><span class="n">${cs.length} 张</span></header>
-      <div class="pbody" data-t="${k}">${cs.length ? masonryHTML(cs, paneW) : '<div class="pempty">暂无</div>'}</div>
+      <header><span class="type">${v}</span><span class="n">${cs.length} 张</span>
+        <span class="pager">${h ? `<button data-pg="-1" title="上一页">‹</button><span class="pg"></span><button data-pg="1" title="下一页">›</button>` : ''}
+        <button class="pmode ${h ? 'on' : ''}" data-pmode="${k}" title="${h ? '切换为上下滚动' : '切换为左右翻页'}">${h ? '⇆ 左右' : '⇅ 上下'}</button></span></header>
+      <div class="pbody ${h ? 'h' : ''}" data-t="${k}" ${h ? `data-n="${hPerPage(w)}" style="--hn:${hPerPage(w)}"` : ''}>${body}</div>
     </section>`;
-  }).join('')}</div>`;
-  $('grid').querySelectorAll('.pbody').forEach(el => { if (keep[el.dataset.t]) el.scrollTop = keep[el.dataset.t]; });
+  };
+  const W = $('grid').clientWidth - 14, lw = W * R.col / 100 - 24, rw = W * (100 - R.col) / 100 - 24;
+  // 布局：左列 = 第 1、3 个类型，右列 = 第 2、4 个类型
+  $('grid').innerHTML = `<div class="quad">
+    <div class="qcol" data-side="left" style="flex-basis:${R.col}%">
+      <div class="qcell" style="flex-basis:${R.left}%">${paneHTML(ord[0], lw)}</div>
+      <div class="qsplit h" data-split="left" title="拖动调整上下比例，双击恢复"></div>
+      <div class="qcell" style="flex-basis:${100 - R.left}%">${paneHTML(ord[2], lw)}</div>
+    </div>
+    <div class="qsplit v" data-split="col" title="拖动调整左右比例，双击恢复"></div>
+    <div class="qcol" data-side="right" style="flex-basis:${100 - R.col}%">
+      <div class="qcell" style="flex-basis:${R.right}%">${paneHTML(ord[1], rw)}</div>
+      <div class="qsplit h" data-split="right" title="拖动调整上下比例，双击恢复"></div>
+      <div class="qcell" style="flex-basis:${100 - R.right}%">${paneHTML(ord[3], rw)}</div>
+    </div></div>`;
+  $('grid').querySelectorAll('.pbody').forEach(el => {
+    const k = keep[el.dataset.t];
+    if (k) { el.scrollTop = k[0]; el.scrollLeft = k[1]; }
+    if (el.classList.contains('h')) { updatePager(el); el.addEventListener('scroll', () => updatePager(el), { passive: true }); }
+  });
 }
+// 拖动分隔条调整四分比例：拖竖线改左右宽度，拖横线改该列上下高度；其余区自动填满
+$('grid').addEventListener('mousedown', e => {
+  const sp = e.target.closest('.qsplit');
+  if (!sp) return;
+  e.preventDefault();
+  const which = sp.dataset.split, quad = sp.closest('.quad');
+  const box = (which === 'col' ? quad : sp.parentElement).getBoundingClientRect();
+  sp.classList.add('drag'); document.body.classList.add('resizing');
+  document.body.style.cursor = which === 'col' ? 'col-resize' : 'row-resize';
+  const move = ev => {
+    const pct = which === 'col'
+      ? (ev.clientX - box.left) / box.width * 100
+      : (ev.clientY - box.top) / box.height * 100;
+    const v = Math.max(15, Math.min(85, pct));
+    S.quadRatio = { ...S.quadRatio, [which]: Math.round(v * 10) / 10 };
+    if (which === 'col') {
+      quad.querySelector('.qcol[data-side=left]').style.flexBasis = v + '%';
+      quad.querySelector('.qcol[data-side=right]').style.flexBasis = (100 - v) + '%';
+    } else {
+      const cells = sp.parentElement.querySelectorAll('.qcell');
+      cells[0].style.flexBasis = v + '%'; cells[1].style.flexBasis = (100 - v) + '%';
+    }
+  };
+  const up = () => {
+    document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
+    sp.classList.remove('drag'); document.body.classList.remove('resizing'); document.body.style.cursor = '';
+    saveView(); render();   // 按新宽度重排每个区里的列数
+  };
+  document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+});
+$('grid').addEventListener('dblclick', e => {
+  const sp = e.target.closest('.qsplit');
+  if (!sp) return;
+  S.quadRatio = { ...S.quadRatio, [sp.dataset.split]: 50 };
+  saveView(); render();
+});
+
+// 左右翻页：每页放整数张卡片（按卡片大小和区宽计算），翻一页正好一整屏
+const H_GAP = 12;
+function hPerPage(w) {
+  const cw = { s: 240, m: 320, l: 440 }[S.size];
+  return Math.max(1, Math.floor((w + H_GAP) / (cw + H_GAP)));
+}
+function updatePager(el) {
+  const pg = el.parentElement.querySelector('.pg');
+  if (!pg) return;
+  const n = +el.dataset.n || 1, cells = el.querySelectorAll('.hcell').length;
+  const total = Math.max(1, Math.ceil(cells / n));
+  const cur = Math.min(total, Math.round(el.scrollLeft / (el.clientWidth + H_GAP)) + 1);
+  pg.textContent = `${cur} / ${total}`;
+}
+$('grid').addEventListener('click', e => {
+  const pm = e.target.closest('[data-pmode]');
+  if (pm) {
+    const k = pm.dataset.pmode;
+    S.paneMode = { ...S.paneMode, [k]: S.paneMode[k] === 'h' ? 'v' : 'h' };
+    saveView(); return render();
+  }
+  const pg = e.target.closest('[data-pg]');
+  if (pg) {
+    const body = pg.closest('.pane').querySelector('.pbody');
+    body.scrollBy({ left: +pg.dataset.pg * (body.clientWidth + H_GAP), behavior: 'smooth' });
+  }
+});
 function masonryHTML(cards, width) {
   const cw = { s: 240, m: 320, l: 440 }[S.size];
   const n = Math.max(1, Math.floor((width + 16) / (cw + 16)));
@@ -439,6 +576,14 @@ $('types').addEventListener('drop', e => {
   saveTypeOrder();
 });
 $('types').addEventListener('dragend', () => { dragType = null; render(); });
+
+$('clearTag').onclick = () => { S.tagSel.clear(); render(); };
+$('tagMultiBtn').onclick = () => {
+  S.tagMulti = !S.tagMulti;
+  if (!S.tagMulti && S.tagSel.size > 1) S.tagSel = new Set([[...S.tagSel][0]]);
+  saveView(); render();
+};
+$('tagMode').onclick = e => { const m = e.target.dataset.m; if (m) { S.tagAll = m === 'all'; saveView(); render(); } };
 
 $('clearSel').onclick = () => { S.sel.clear(); render(); };
 $('multiSel').onclick = () => {
@@ -541,10 +686,10 @@ async function manageTag(t) {
   if (!nv) {
     if (!confirm(`从所有卡片中删除标签「${t}」？卡片本身不会删除。`)) return;
     await api('/api/tags/delete', { method: 'POST', body: JSON.stringify({ old: t }) });
-    if (S.tag === t) S.tag = null;
+    S.tagSel.delete(t);
   } else {
     await api('/api/tags/rename', { method: 'POST', body: JSON.stringify({ old: t, new: nv }) });
-    if (S.tag === t) S.tag = nv;
+    if (S.tagSel.delete(t)) S.tagSel.add(nv);
   }
   toast('标签已更新'); load();
 }
