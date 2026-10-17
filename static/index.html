@@ -192,7 +192,9 @@ dialog img { max-width: 100%; max-height: 220px; display: block; margin: 0 auto;
       <kbd>⌃⌥⌘A</kbd> 自动截图（换页就截）<br>
       <kbd>⌃⌥⌘V</kbd> 收集剪贴板（Snipaste 截图后）<br>
       <kbd>⌃⌥⌘P</kbd> 打开卡片墙<br>
-      在本页 <kbd>⌘V</kbd> 粘贴图片/文字新建
+      在本页 <kbd>⌘V</kbd> 粘贴图片/文字新建<br>
+      <kbd>← →</kbd> 上一张 / 下一张卡片<br>
+      <kbd>⌥← ⌥→</kbd> 切换到上一个 / 下一个类型
     </div>
   </aside>
   <div class="resizer" id="resizer" title="拖动调整左栏宽度，双击恢复默认"></div>
@@ -482,9 +484,40 @@ $('grid').addEventListener('mousedown', e => {
   const c = e.target.closest('.card');   // 点卡片即设为当前卡片
   if (c) { curCard[navKey()] = +c.dataset.id; markCurrent(false); }
 });
+// ⌥← / ⌥→：切到上一个 / 下一个类型的第一张卡片（按类型顺序循环，跳过没有卡片的类型）
+function jumpType(dir) {
+  const cardType = id => (S.cards.find(c => c.id === id) || {}).type;
+  if (S.layout === 'quad') {
+    const has = typeOrder.filter(k => (navOrder[k] || []).length);
+    if (!has.length) return;
+    let i = typeOrder.indexOf(activePane());
+    for (let step = 0; step < typeOrder.length; step++) {
+      i = (i + dir + typeOrder.length) % typeOrder.length;
+      if ((navOrder[typeOrder[i]] || []).length) break;
+    }
+    const k = typeOrder[i];
+    activePaneKey = null; setActivePane(k);
+    curCard[k] = navOrder[k][0];
+    markCurrent(true);
+  } else {
+    const ids = navOrder.all || [];
+    if (!ids.length) return;
+    const curT = cardType(curCard.all) || cardType(ids[0]);
+    let i = typeOrder.indexOf(curT);
+    for (let step = 0; step < typeOrder.length; step++) {
+      i = (i + dir + typeOrder.length) % typeOrder.length;
+      const first = ids.find(id => cardType(id) === typeOrder[i]);
+      if (first) { curCard.all = first; break; }
+    }
+    markCurrent(true);
+  }
+  const t = S.layout === 'quad' ? activePane() : cardType(curCard.all);
+  if (t) toast(TYPES[t]);
+}
 document.addEventListener('keydown', e => {
   if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-  if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]')) return;
+  if (e.metaKey || e.ctrlKey || e.target.closest('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]')) return;
+  if (e.altKey) { e.preventDefault(); return jumpType(e.key === 'ArrowRight' ? 1 : -1); }
   const key = navKey(), ids = navOrder[key] || [];
   if (!ids.length) return;
   e.preventDefault();
