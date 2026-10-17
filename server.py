@@ -78,9 +78,43 @@ def paper_dict(r):
     return d
 
 
+_img_size = {}
+
+
+def image_size(name):
+    """读图片宽高（PNG 读文件头，JPEG 扫描 SOF 段），用于网页提前占位。结果缓存。"""
+    if name in _img_size:
+        return _img_size[name]
+    size = None
+    try:
+        with open(os.path.join(IMAGES, name), "rb") as f:
+            head = f.read(26)
+            if head[:8] == b"\x89PNG\r\n\x1a\n":
+                size = struct.unpack(">II", head[16:24])
+            elif head[:2] == b"\xff\xd8":
+                f.seek(2)
+                while True:
+                    m = f.read(4)
+                    if len(m) < 4 or m[0] != 0xFF:
+                        break
+                    seg_len = struct.unpack(">H", m[2:4])[0]
+                    if m[1] in (0xC0, 0xC1, 0xC2):
+                        h, w = struct.unpack(">HH", f.read(5)[1:5])
+                        size = (w, h)
+                        break
+                    f.seek(seg_len - 2, 1)
+    except OSError:
+        pass
+    _img_size[name] = size
+    return size
+
+
 def card_dict(c, r):
     d = dict(r)
     d["tags"] = json.loads(d["tags"] or "[]")
+    if d.get("image"):
+        size = image_size(d["image"])
+        d["img_w"], d["img_h"] = size if size else (None, None)
     d["paper"] = paper_dict(c.execute("SELECT * FROM papers WHERE id=?", (d["paper_id"],)).fetchone()) if d["paper_id"] else None
     return d
 
