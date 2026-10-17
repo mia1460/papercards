@@ -50,7 +50,7 @@ Everything stays on your machine (SQLite + an image folder). No cloud services.
 
 **Capture panel**
 
-Enter or Esc saves, `⌘1–4` switches the type (quote / figure / data / idea), `⌘⌫` discards an accidental capture.
+The cursor starts in the tag box: Enter adds a tag, Enter on an empty box jumps to the note; Enter in the note saves (⇧Enter for a new line). `⌘⏎` saves from anywhere, Esc saves and closes, `⌘1–4` switches the type (quote / figure / data / idea), `⌘⌫` discards an accidental capture.
 
 **Auto-capture**
 
@@ -60,10 +60,15 @@ Enter or Esc saves, `⌘1–4` switches the type (quote / figure / data / idea),
 
 **Card wall** (`http://127.0.0.1:8787`)
 
-- Filter by source (multi-select), tag and type; full-text search
-- Group (by source / type) × sort (newest / oldest); masonry, grid and list layouts
-- Click a note to edit it inline; paste an image or text with `⌘V` to create a card
+- Filter by source, tag and type; full-text search. Sources and tags are single-select by default, with a multi-select toggle (or ⌘-click); multiple tags can match "any" or "all"; the tag list only counts cards from the selected sources
+- Group (by source / type) × sort (newest / oldest); masonry, grid, list and quad layouts; adjustable card size and a draggable sidebar
+- **Quad layout**: ideas, quotes, figures and data each get their own independently scrolling pane; drag the dividers to resize (double-click to reset), switch each pane between vertical scrolling and horizontal paging, reset in one click
+- Type order puts ideas first by default; drag the type buttons at the top to reorder
+- **Keyboard browsing**: `←` `→` previous / next card (snapped to the top), `⌥←` `⌥→` first card of the previous / next type; in the quad layout this acts on the pane under the mouse
+- Add / remove tags right on a card (with autocomplete); rename, merge or delete tags from the sidebar; click a note to edit it inline
+- Paste an image or text with `⌘V` to create a card; timestamps down to the second
 - Export to Markdown (a zip with images and BibTeX)
+- Save a view as a bookmark with URL parameters, e.g. `?layout=quad&q=60,50,50&tags=results` (parameters: `layout` `group` `sort` `size` `sources` `tags` `h` `q`)
 
 ## Installation
 
