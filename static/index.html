@@ -60,6 +60,10 @@ main { padding: 20px 28px 60px; min-width: 0; }
 .seg button { border: 0; background: none; color: var(--muted); padding: 4px 12px; border-radius: 6px; font-size: 13px; }
 .seg button.on { background: var(--chip); color: var(--ink); font-weight: 600; }
 .bar .sp { flex: 1; }
+.seg button[draggable="true"] { cursor: grab; }
+.seg button.dragging { opacity: .4; }
+.seg button.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
+.seg button.drop-after { box-shadow: inset -2px 0 0 var(--accent); }
 .bar .count { color: var(--muted); font-size: 13px; }
 .btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 5px 12px; font-size: 13px; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
@@ -174,7 +178,7 @@ dialog img { max-width: 100%; max-height: 220px; display: block; margin: 0 auto;
   <h3 id="cardDlgTitle">编辑卡片</h3>
   <div id="dImg"></div>
   <div class="row">
-    <div><label>类型</label><select id="dType"><option value="quote">摘录</option><option value="figure">图表</option><option value="data">数据</option><option value="idea">想法</option></select></div>
+    <div><label>类型</label><select id="dType"></select></div>
     <div><label>页码</label><input id="dPage"></div>
   </div>
   <label>内容</label><textarea id="dContent"></textarea>
@@ -202,6 +206,14 @@ dialog img { max-width: 100%; max-height: 220px; display: block; margin: 0 auto;
 
 <script>
 const TYPES = { quote: '摘录', figure: '图表', data: '数据', idea: '想法' };
+// 类型的显示顺序：默认想法在前，可在顶部按钮上拖动调整（记在浏览器里）
+let typeOrder = ['idea', 'quote', 'figure', 'data'];
+try {
+  const saved = JSON.parse(localStorage.getItem('papercards.typeOrder') || 'null');
+  if (Array.isArray(saved) && saved.length === 4 && saved.every(k => k in TYPES)) typeOrder = saved;
+} catch (e) {}
+const orderedTypes = () => typeOrder.map(k => [k, TYPES[k]]);
+function saveTypeOrder() { try { localStorage.setItem('papercards.typeOrder', JSON.stringify(typeOrder)); } catch (e) {} }
 const S = { cards: [], papers: [], tags: [], type: '', sel: new Set(), tag: null, q: '', sort: 'new', group: '', multi: false, layout: 'masonry', size: 'm' };
 const LAYOUTS = { masonry: '瀑布流', grid: '网格', list: '列表' };
 const SIZES = { s: '小', m: '中', l: '大' };
@@ -246,9 +258,10 @@ function filtered() {
     (!q || [c.content, c.note, c.tags.join(' '), c.paper && c.paper.title, c.paper && c.paper.authors.join(' ')].join(' ').toLowerCase().includes(q)));
 }
 function render() {
-  $('types').innerHTML = [['', '全部'], ...Object.entries(TYPES)].map(([k, v]) =>
-    `<button data-k="${k}" class="${S.type === k ? 'on' : ''}">${v}</button>`).join('');
+  $('types').innerHTML = [['', '全部'], ...orderedTypes()].map(([k, v]) =>
+    `<button data-k="${k}" class="${S.type === k ? 'on' : ''}" ${k ? 'draggable="true" title="拖动调整顺序"' : ''}>${v}</button>`).join('');
   $('types').querySelectorAll('button').forEach(b => b.onclick = () => { S.type = b.dataset.k; render(); });
+  $('dType').innerHTML = orderedTypes().map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
 
   const unsorted = S.cards.filter(c => !c.paper_id).length;
   $('papers').innerHTML = S.papers.filter(p => p.n).map(p =>
@@ -308,7 +321,7 @@ function groupCards(cards) {
     return [...m].sort((a, b) => (a[0] === '未标注来源') - (b[0] === '未标注来源')).map(([title, cards]) => ({ title, cards }));
   }
   if (S.group === 'type') {
-    return Object.entries(TYPES).map(([k, v]) => ({ title: v, cards: cards.filter(c => c.type === k) })).filter(g => g.cards.length);
+    return orderedTypes().map(([k, v]) => ({ title: v, cards: cards.filter(c => c.type === k) })).filter(g => g.cards.length);
   }
   return [{ title: '', cards }];
 }
@@ -363,6 +376,33 @@ $('resizer').addEventListener('mousedown', e => {
   document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
 });
 $('resizer').addEventListener('dblclick', () => { setSide(270); try { localStorage.removeItem('papercards.side'); } catch (e) {} render(); });
+
+// 拖动类型按钮调整顺序
+let dragType = null;
+$('types').addEventListener('dragstart', e => {
+  dragType = e.target.dataset && e.target.dataset.k;
+  if (!dragType) return e.preventDefault();
+  e.target.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+});
+$('types').addEventListener('dragover', e => {
+  const b = e.target.closest('button[draggable="true"]');
+  if (!dragType || !b || b.dataset.k === dragType) return;
+  e.preventDefault();
+  const r = b.getBoundingClientRect(), after = e.clientX > r.left + r.width / 2;
+  $('types').querySelectorAll('button').forEach(x => x.classList.remove('drop-before', 'drop-after'));
+  b.classList.add(after ? 'drop-after' : 'drop-before');
+});
+$('types').addEventListener('drop', e => {
+  const b = e.target.closest('button[draggable="true"]');
+  if (!dragType || !b || b.dataset.k === dragType) return;
+  e.preventDefault();
+  const after = b.classList.contains('drop-after');
+  typeOrder = typeOrder.filter(k => k !== dragType);
+  typeOrder.splice(typeOrder.indexOf(b.dataset.k) + (after ? 1 : 0), 0, dragType);
+  saveTypeOrder();
+});
+$('types').addEventListener('dragend', () => { dragType = null; render(); });
 
 $('clearSel').onclick = () => { S.sel.clear(); render(); };
 $('multiSel').onclick = () => {
@@ -566,7 +606,7 @@ $('exportBtn').onclick = () => {
 };
 
 load();
-window.addEventListener('focus', load);
+window.addEventListener('focus', () => { if (!document.querySelector('dialog[open], .note-edit, .tagin')) load(); });
 setInterval(() => { if (!document.hidden && !document.querySelector('dialog[open], .note-edit, .tagin')) load(); }, 5000);
 </script>
 </body>
