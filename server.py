@@ -484,37 +484,85 @@ def bibtex(p):
     return f"@article{{{key},\n{body}\n}}"
 
 
-def export_markdown(cards):
-    by_paper = {}
-    for c in cards:
-        by_paper.setdefault(c["paper_id"], []).append(c)
-    labels = {"quote": "摘录", "figure": "图表", "data": "数据", "idea": "想法"}
+TYPE_LABELS = {"quote": "摘录", "figure": "图表", "data": "数据", "idea": "想法"}
+
+
+def export_image_names(cards):
+    """导出时的图片文件名：类型-序号（同类型内按创建时间从早到晚编号），如 图表-1.png。"""
+    names, count = {}, {}
+    for c in sorted((c for c in cards if c.get("image")), key=lambda c: c["created_at"]):
+        label = TYPE_LABELS.get(c["type"], c["type"])
+        count[label] = count.get(label, 0) + 1
+        ext = os.path.splitext(c["image"])[1] or ".png"
+        names[c["id"]] = f"{label}-{count[label]}{ext}"
+    return names
+
+
+def export_markdown(cards, mode="type", type_order=None, img_names=None):
+    """cards 已按页面显示顺序排列。mode：type 按类型分节 / paper 按来源分节 / flat 平铺。"""
+    type_order = [t for t in (type_order or []) if t in TYPE_LABELS] or ["idea", "quote", "figure", "data"]
+    img_names = img_names or {}
     out = [f"# 论文素材导出（{time.strftime('%Y-%m-%d')}）\n"]
-    bibs = []
-    for pid, cs in by_paper.items():
-        p = cs[0]["paper"]
-        if p:
-            out.append(f"## {p['title']}\n\n*{', '.join(p['authors'][:6])}{' 等' if len(p['authors']) > 6 else ''}* · {p.get('venue') or ''} {p.get('year') or ''}"
-                       + (f" · [链接]({p['url']})" if p.get("url") else "") + "\n")
-            bibs.append(bibtex(p))
-        else:
-            out.append("## 未标注来源\n")
-        for c in cs:
-            loc = f"（{cite_short(p)}{', p. ' + c['page'] if c.get('page') else ''}）" if p else ""
-            tags = " ".join("#" + t for t in c["tags"])
-            stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(c["created_at"]))
-            out.append(f"**[{labels.get(c['type'], c['type'])}]** `{stamp}` {tags}\n")
-            if c.get("image"):
-                out.append(f"![](images/{c['image']})\n")
-            if c.get("content"):
-                out.append("\n".join("> " + line for line in c["content"].splitlines()) + f" {loc}\n")
-            elif loc:
-                out.append(loc + "\n")
-            if c.get("note"):
-                out.append(f"备注：{c['note']}\n")
+
+    def card_md(c, show_type=True):
+        p = c["paper"]
+        loc = f"（{cite_short(p)}{', p. ' + c['page'] if c.get('page') else ''}）" if p else ""
+        tags = " ".join("#" + t for t in c["tags"])
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(c["created_at"]))
+        head = (f"**[{TYPE_LABELS.get(c['type'], c['type'])}]** " if show_type else "") + f"`{stamp}` {tags}".rstrip()
+        md = [head + "\n"]
+        if c.get("image"):
+            md.append(f"![{img_names.get(c['id'], '')}](images/{img_names.get(c['id'], c['image'])})\n")
+        if c.get("content"):
+            md.append("\n".join("> " + line for line in c["content"].splitlines()) + f" {loc}\n")
+        elif loc:
+            md.append(loc + "\n")
+        if c.get("note"):
+            md.append(f"备注：{c['note']}\n")
+        return md
+
+    if mode == "paper":
+        sections = {}
+        for c in cards:
+            sections.setdefault(c["paper_id"], []).append(c)
+        for pid, cs in sections.items():
+            p = cs[0]["paper"]
+            if p:
+                out.append(f"## {p['title']}\n\n*{', '.join(p['authors'][:6])}{' 等' if len(p['authors']) > 6 else ''}* · {p.get('venue') or ''} {p.get('year') or ''}"
+                           + (f" · [链接]({p['url']})" if p.get("url") else "") + "\n")
+            else:
+                out.append("## 未标注来源\n")
+            for c in cs:
+                out += card_md(c)
+            out.append("")
+    elif mode == "type":
+        for t in type_order:
+            cs = [c for c in cards if c["type"] == t]
+            if not cs:
+                continue
+            out.append(f"## {TYPE_LABELS[t]}（{len(cs)}）\n")
+            for c in cs:
+                out += card_md(c, show_type=False)
+            out.append("")
+    else:
+        for c in cards:
+            out += card_md(c)
         out.append("")
-    if bibs:
-        out.append("## BibTeX\n\n```bibtex\n" + "\n\n".join(bibs) + "\n```\n")
+
+    # 文末：涉及的全部来源 + BibTeX
+    papers, seen = [], set()
+    for c in cards:
+        if c["paper"] and c["paper_id"] not in seen:
+            seen.add(c["paper_id"])
+            papers.append(c["paper"])
+    if papers and mode != "paper":
+        out.append("## 来源\n")
+        for p in papers:
+            out.append(f"- {p['title']}" + (f" — {cite_short(p)}" if cite_short(p) else "") + (f" · {p['venue']}" if p.get("venue") else "")
+                       + (f" · <{p['url']}>" if p.get("url") else ""))
+        out.append("")
+    if papers:
+        out.append("## BibTeX\n\n```bibtex\n" + "\n\n".join(bibtex(p) for p in papers) + "\n```\n")
     return "\n".join(out)
 
 
@@ -582,17 +630,20 @@ class Handler(BaseHTTPRequestHandler):
                         counts[tag] = counts.get(tag, 0) + 1
                 return self.send(200, sorted(counts.items(), key=lambda x: -x[1]))
             if path == "/api/export":
+                # ids 按页面显示顺序传入；mode / types 让导出的分节和类型顺序与页面一致
                 ids = [int(i) for i in q.get("ids", "").split(",") if i]
-                rows = c.execute("SELECT * FROM cards ORDER BY paper_id, created_at").fetchall()
-                cards = [card_dict(c, r) for r in rows if not ids or r["id"] in ids]
+                rows = {r["id"]: r for r in c.execute("SELECT * FROM cards ORDER BY created_at DESC").fetchall()}
+                cards = [card_dict(c, rows[i]) for i in ids if i in rows] if ids else [card_dict(c, r) for r in rows.values()]
+                mode = q.get("mode") if q.get("mode") in ("type", "paper", "flat") else "type"
+                img_names = export_image_names(cards)
                 # 打包成 zip：md + images/，解压后图片相对路径可用
                 name = f"papercards-{time.strftime('%Y%m%d-%H%M')}"
                 buf = io.BytesIO()
                 with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                    zf.writestr(f"{name}/{name}.md", export_markdown(cards))
+                    zf.writestr(f"{name}/{name}.md", export_markdown(cards, mode, q.get("types", "").split(","), img_names))
                     for card in cards:
                         if card.get("image") and os.path.exists(os.path.join(IMAGES, card["image"])):
-                            zf.write(os.path.join(IMAGES, card["image"]), f"{name}/images/{card['image']}")
+                            zf.write(os.path.join(IMAGES, card["image"]), f"{name}/images/{img_names[card['id']]}")
                 return self.send(200, buf.getvalue(), "application/zip",
                                  {"Content-Disposition": f"attachment; filename={name}.zip"})
             m = re.fullmatch(r"/api/papers/(\d+)/bibtex", path)

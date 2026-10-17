@@ -910,10 +910,13 @@ $('pBib').onclick = async () => {
   await navigator.clipboard.writeText(t); toast('BibTeX 已复制');
 };
 
+// 导出：按页面当前的显示顺序和分组方式
 $('exportBtn').onclick = () => {
-  const ids = filtered().map(c => c.id).join(',');
-  if (!ids) return toast('没有可导出的卡片');
-  location.href = '/api/export?ids=' + ids;
+  const quad = S.layout === 'quad';
+  const ids = quad ? typeOrder.flatMap(k => navOrder[k] || []) : (navOrder.all || []);
+  if (!ids.length) return toast('没有可导出的卡片');
+  const mode = quad || S.group === 'type' ? 'type' : S.group === 'paper' ? 'paper' : 'flat';
+  location.href = `/api/export?ids=${ids.join(',')}&mode=${mode}&types=${typeOrder.join(',')}`;
 };
 
 load();
