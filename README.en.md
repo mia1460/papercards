@@ -17,6 +17,18 @@ Everything stays on your machine (SQLite + an image folder). No cloud services.
 
 <sub>Screenshots use sample data: quotes and numbers are taken from the cited papers; charts are redrawn from the papers' reported values for illustration.</sub>
 
+## How it looks in use
+
+**Grab a sentence in Zotero**: select it → `⌃⌥⌘C`. The panel opens with the paper's title, authors, year and page already filled in; add a tag and press Enter.
+
+![Select text in Zotero, press ⌃⌥⌘C, a card pops up](docs/capture-zotero.png)
+
+**Grab a figure from a web page**: `⌃⌥⌘S` starts a Snipaste snip; when you're done, a figure card pops up with the source detected from the page (arXiv / DOI).
+
+![Snip a figure in Chrome with Snipaste, press ⌃⌥⌘S, a card pops up](docs/capture-chrome.png)
+
+<sub>Illustrations: the app windows are mock-ups (UI text in Chinese); the card panel is a real PaperCards screenshot.</sub>
+
 ## Features
 
 **Capture**
