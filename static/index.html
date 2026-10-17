@@ -298,8 +298,14 @@ function srcLink(c) {
   return p && p.url;
 }
 
-async function load() {
-  [S.cards, S.papers, S.tags] = await Promise.all([api('/api/cards'), api('/api/papers'), api('/api/tags')]);
+// 数据没变化时不重画（避免自动刷新打断滚动、编辑等操作）
+let lastSnap = '';
+async function load(force) {
+  const r = await Promise.all([api('/api/cards'), api('/api/papers'), api('/api/tags')]);
+  const snap = JSON.stringify(r);
+  if (!force && snap === lastSnap) return;
+  lastSnap = snap;
+  [S.cards, S.papers, S.tags] = r;
   render();
 }
 function filtered(ignoreType) {
@@ -378,7 +384,7 @@ function render() {
   navOrder = { all: groups.flatMap(g => g.cards.map(c => c.id)) };
   $('grid').innerHTML = groups.map(g =>
     (g.title ? `<div class="group">${esc(g.title)}<span class="n">${g.cards.length} 张</span></div>` : '') + layoutHTML(g.cards)).join('');
-  markCurrent(false);
+  markCurrent(Date.now() - navAt < 1500);
 }
 
 function sortCards(cards) {
@@ -442,14 +448,15 @@ function renderQuad() {
     if (el.classList.contains('h')) { updatePager(el); el.addEventListener('scroll', () => updatePager(el), { passive: true }); }
   });
   $('grid').querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.dataset.t === activePane()));
-  markCurrent(false);
+  markCurrent(Date.now() - navAt < 1500);
 }
 
 // ---- 键盘 ← → 在卡片间切换（四分布局下作用于当前区：鼠标所在或最近点击的区）
-let navOrder = {}, curCard = {}, activePaneKey = null;
+let navOrder = {}, curCard = {}, activePaneKey = null, navAt = 0;
 const activePane = () => activePaneKey || typeOrder[0];
 const navKey = () => S.layout === 'quad' ? activePane() : 'all';
 function markCurrent(scroll) {
+  if (scroll) navAt = navAt || Date.now();
   $('grid').querySelectorAll('.card.cur').forEach(el => el.classList.remove('cur'));
   const key = navKey(), id = curCard[key];
   if (!id) return;
@@ -517,6 +524,7 @@ function jumpType(dir) {
 document.addEventListener('keydown', e => {
   if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
   if (e.metaKey || e.ctrlKey || e.target.closest('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]')) return;
+  navAt = Date.now();
   if (e.altKey) { e.preventDefault(); return jumpType(e.key === 'ArrowRight' ? 1 : -1); }
   const key = navKey(), ids = navOrder[key] || [];
   if (!ids.length) return;
