@@ -73,6 +73,18 @@ main { padding: 20px 28px 60px; min-width: 0; }
 .group:first-child { margin-top: 0; }
 .group .n { font: 12px -apple-system, sans-serif; color: var(--muted); }
 .masonry { display: flex; gap: 16px; align-items: flex-start; }
+body.quad-mode main { height: 100vh; display: flex; flex-direction: column; padding-bottom: 20px; overflow: hidden; }
+body.quad-mode .grid { flex: 1; min-height: 0; }
+.quad { height: 100%; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 14px; }
+.pane { min-height: 0; min-width: 0; display: flex; flex-direction: column; background: rgba(0,0,0,.025); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.pane[data-t=quote] { --t: var(--quote); } .pane[data-t=figure] { --t: var(--figure); }
+.pane[data-t=data] { --t: var(--data); } .pane[data-t=idea] { --t: var(--idea); }
+.pane header { display: flex; align-items: baseline; gap: 8px; padding: 9px 14px; border-bottom: 1px solid var(--line); border-top: 3px solid var(--t); background: var(--panel); }
+.pane header .type { color: var(--t); font-weight: 700; } .pane header .n { color: var(--muted); font-size: 12px; }
+.pane.focus { box-shadow: 0 0 0 2px var(--t); }
+.pbody { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; overscroll-behavior: contain; }
+.pempty { color: var(--muted); text-align: center; padding: 40px 0; font-size: 13px; }
+@media (max-width: 760px) { body.quad-mode main { height: auto; overflow: visible; } .quad { grid-template-columns: 1fr; grid-template-rows: none; } .pane { height: 70vh; } }
 .masonry .col { flex: 1; min-width: 0; }
 .gridl { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--cw), 1fr)); gap: 16px; }
 .gridl .card { margin: 0; height: var(--gh); display: flex; flex-direction: column; }
@@ -94,7 +106,9 @@ main { padding: 20px 28px 60px; min-width: 0; }
 .card[data-t=data] { --t: var(--data); } .card[data-t=idea] { --t: var(--idea); }
 .card .head { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-bottom: 6px; }
 .card .type { color: var(--t); font-weight: 700; letter-spacing: .5px; }
-.card .acts { margin-left: auto; display: flex; gap: 2px; opacity: 0; transition: opacity .15s; }
+.card .head .type { flex: none; white-space: nowrap; }
+.card .head > span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.card .acts { position: absolute; right: 10px; top: 9px; display: flex; gap: 2px; opacity: 0; transition: opacity .15s; background: var(--panel); border-radius: 6px; }
 .card:hover .acts { opacity: 1; }
 .card .acts button { border: 0; background: none; color: var(--muted); font-size: 12px; padding: 2px 5px; border-radius: 4px; }
 .card .acts button:hover { background: var(--chip); color: var(--ink); }
@@ -215,7 +229,7 @@ try {
 const orderedTypes = () => typeOrder.map(k => [k, TYPES[k]]);
 function saveTypeOrder() { try { localStorage.setItem('papercards.typeOrder', JSON.stringify(typeOrder)); } catch (e) {} }
 const S = { cards: [], papers: [], tags: [], type: '', sel: new Set(), tag: null, q: '', sort: 'new', group: '', multi: false, layout: 'masonry', size: 'm' };
-const LAYOUTS = { masonry: '瀑布流', grid: '网格', list: '列表' };
+const LAYOUTS = { masonry: '瀑布流', grid: '网格', list: '列表', quad: '四分' };
 const SIZES = { s: '小', m: '中', l: '大' };
 try { Object.assign(S, JSON.parse(localStorage.getItem('papercards.view') || '{}')); } catch (e) {}
 for (const [k, v] of new URLSearchParams(location.search)) if (['sort', 'group', 'layout', 'size'].includes(k)) S[k] = v;
@@ -249,10 +263,10 @@ async function load() {
   [S.cards, S.papers, S.tags] = await Promise.all([api('/api/cards'), api('/api/papers'), api('/api/tags')]);
   render();
 }
-function filtered() {
+function filtered(ignoreType) {
   const q = S.q.toLowerCase();
   return S.cards.filter(c =>
-    (!S.type || c.type === S.type) &&
+    (ignoreType || !S.type || c.type === S.type) &&
     (!S.sel.size || S.sel.has(c.paper_id || 0)) &&
     (!S.tag || c.tags.includes(S.tag)) &&
     (!q || [c.content, c.note, c.tags.join(' '), c.paper && c.paper.title, c.paper && c.paper.authors.join(' ')].join(' ').toLowerCase().includes(q)));
@@ -300,6 +314,9 @@ function render() {
     $('grid').innerHTML = `<div class="empty">还没有卡片。<br>在 Zotero 或 Chrome 里选中一段文字，按 <kbd>⌃⌥⌘C</kbd>；<br>想收集图表，按 <kbd>⌃⌥⌘S</kbd> 框选截图。</div>`;
     return;
   }
+  document.body.classList.toggle('quad-mode', S.layout === 'quad');
+  $('group').style.display = S.layout === 'quad' ? 'none' : '';   // 四分本身就是按类型分区
+  if (S.layout === 'quad') return renderQuad();
   if (!cards.length) { $('grid').innerHTML = '<div class="empty">没有匹配的卡片</div>'; return; }
   $('grid').innerHTML = groupCards(cards).map(g =>
     (g.title ? `<div class="group">${esc(g.title)}<span class="n">${g.cards.length} 张</span></div>` : '') + layoutHTML(g.cards)).join('');
@@ -325,15 +342,34 @@ function groupCards(cards) {
   }
   return [{ title: '', cards }];
 }
+// 四分布局：每种类型一个区，各自独立滚动；刷新时保留每个区的滚动位置
+function renderQuad() {
+  const keep = {};
+  $('grid').querySelectorAll('.pbody').forEach(el => { keep[el.dataset.t] = el.scrollTop; });
+  const all = sortCards(filtered(true));
+  $('count').textContent = `${all.length} 张卡片`;
+  const paneW = ($('grid').clientWidth - 14) / 2 - 24;
+  $('grid').innerHTML = `<div class="quad">${orderedTypes().map(([k, v]) => {
+    const cs = all.filter(c => c.type === k);
+    return `<section class="pane ${S.type === k ? 'focus' : ''}" data-t="${k}">
+      <header><span class="type">${v}</span><span class="n">${cs.length} 张</span></header>
+      <div class="pbody" data-t="${k}">${cs.length ? masonryHTML(cs, paneW) : '<div class="pempty">暂无</div>'}</div>
+    </section>`;
+  }).join('')}</div>`;
+  $('grid').querySelectorAll('.pbody').forEach(el => { if (keep[el.dataset.t]) el.scrollTop = keep[el.dataset.t]; });
+}
+function masonryHTML(cards, width) {
+  const cw = { s: 240, m: 320, l: 440 }[S.size];
+  const n = Math.max(1, Math.floor((width + 16) / (cw + 16)));
+  const cols = Array.from({ length: n }, () => []);
+  cards.forEach((c, i) => cols[i % n].push(cardHTML(c)));
+  return `<div class="masonry">${cols.map(col => `<div class="col">${col.join('')}</div>`).join('')}</div>`;
+}
 function layoutHTML(cards) {
   if (S.layout === 'grid') return `<div class="gridl">${cards.map(cardHTML).join('')}</div>`;
   if (S.layout === 'list') return `<div class="listl">${cards.map(cardHTML).join('')}</div>`;
   // 瀑布流：按顺序轮流放进各列，保证从左到右阅读顺序和排序一致
-  const cw = { s: 240, m: 320, l: 440 }[S.size];
-  const n = Math.max(1, Math.floor(($('grid').clientWidth + 16) / (cw + 16)));
-  const cols = Array.from({ length: n }, () => []);
-  cards.forEach((c, i) => cols[i % n].push(cardHTML(c)));
-  return `<div class="masonry">${cols.map(col => `<div class="col">${col.join('')}</div>`).join('')}</div>`;
+  return masonryHTML(cards, $('grid').clientWidth);
 }
 function cardHTML(c) {
   const link = srcLink(c);
@@ -371,7 +407,7 @@ $('resizer').addEventListener('mousedown', e => {
     document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
     $('resizer').classList.remove('drag'); document.body.classList.remove('resizing');
     try { if (w) localStorage.setItem('papercards.side', w); } catch (e) {}
-    if (S.layout === 'masonry') render();
+    if (S.layout === 'masonry' || S.layout === 'quad') render();
   };
   document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
 });
@@ -415,7 +451,7 @@ $('group').onchange = e => { S.group = e.target.value; saveView(); render(); };
 $('layout').onclick = e => { const k = e.target.dataset.k; if (k) { S.layout = k; saveView(); render(); } };
 $('size').onclick = e => { const k = e.target.dataset.k; if (k) { S.size = k; saveView(); render(); } };
 let resizeTimer;
-window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (S.layout === 'masonry' && !document.querySelector('.note-edit')) render(); }, 150); });
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if ((S.layout === 'masonry' || S.layout === 'quad') && !document.querySelector('.note-edit, .tagin')) render(); }, 150); });
 
 $('grid').addEventListener('click', async e => {
   const act = e.target.dataset.act;
