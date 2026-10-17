@@ -41,7 +41,17 @@ aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; colo
 .item .edit { opacity: 0; border: 0; background: none; color: var(--muted); padding: 0 2px; }
 .item:hover .edit { opacity: 1; }
 .tagcloud { display: flex; flex-wrap: wrap; gap: 4px; }
-.tagcloud .chip { cursor: pointer; }
+.tagcloud .chip { cursor: pointer; position: relative; }
+.tagcloud .chip .ed { display: none; margin-left: 4px; color: var(--muted); }
+.tagcloud .chip:hover .ed { display: inline; }
+.tagcloud .chip .ed:hover { color: var(--accent); }
+.card .tags .chip { position: relative; }
+.card .tags .chip .x { display: none; margin-left: 3px; color: var(--muted); cursor: pointer; }
+.card:hover .tags .chip .x { display: inline; }
+.card .tags .chip .x:hover { color: var(--accent); }
+.card .tags .addtag { opacity: 0; border: 1px dashed var(--line); background: none; color: var(--muted); border-radius: 10px; padding: 0 8px; font-size: 12px; }
+.card:hover .tags .addtag { opacity: 1; }
+.card .tags input.tagin { border: 1px solid var(--accent); border-radius: 10px; padding: 0 8px; font: 12px inherit; font-family: inherit; width: 110px; background: var(--bg); color: var(--ink); outline: none; }
 .chip { background: var(--chip); border-radius: 10px; padding: 1px 8px; font-size: 12px; color: var(--ink); }
 .chip.on { background: var(--accent); color: #fff; }
 main { padding: 20px 28px 60px; min-width: 0; }
@@ -169,7 +179,7 @@ dialog img { max-width: 100%; max-height: 220px; display: block; margin: 0 auto;
   </div>
   <label>内容</label><textarea id="dContent"></textarea>
   <label>备注</label><textarea id="dNote" style="min-height:50px"></textarea>
-  <label>标签（逗号分隔）</label><input id="dTags">
+  <label>标签（逗号分隔）</label><input id="dTags" list="tagSuggest">
   <label>来源</label>
   <select id="dPaperSel"></select>
   <input id="dPaperNew" placeholder="输入 DOI / arXiv 号 / 链接（自动识别），或直接写标题" style="display:none;margin-top:6px">
@@ -186,6 +196,7 @@ dialog img { max-width: 100%; max-height: 220px; display: block; margin: 0 auto;
   <div class="foot"><button class="btn" id="pBib">复制 BibTeX</button><span style="flex:1"></span><button class="btn" id="pCancel">取消</button><button class="btn primary" id="pSave">保存</button></div>
 </dialog>
 
+<datalist id="tagSuggest"></datalist>
 <div class="lightbox" id="lightbox"><img></div>
 <div class="toast" id="toast"></div>
 
@@ -255,8 +266,12 @@ function render() {
     else S.sel = new Set([id]);                                                     // 单选：只选这个
     render();
   });
-  $('tags').innerHTML = S.tags.map(([t, n]) => `<span class="chip ${S.tag === t ? 'on' : ''}" data-t="${esc(t)}">${esc(t)} ${n}</span>`).join('') || '<span class="help">还没有标签</span>';
-  $('tags').querySelectorAll('.chip').forEach(el => el.onclick = () => { S.tag = S.tag === el.dataset.t ? null : el.dataset.t; render(); });
+  $('tags').innerHTML = S.tags.map(([t, n]) => `<span class="chip ${S.tag === t ? 'on' : ''}" data-t="${esc(t)}">${esc(t)} ${n}<span class="ed" title="重命名 / 合并 / 删除">✎</span></span>`).join('') || '<span class="help">还没有标签</span>';
+  $('tags').querySelectorAll('.chip').forEach(el => el.onclick = e => {
+    if (e.target.classList.contains('ed')) return manageTag(el.dataset.t);
+    S.tag = S.tag === el.dataset.t ? null : el.dataset.t; render();
+  });
+  $('tagSuggest').innerHTML = S.tags.map(([t]) => `<option value="${esc(t)}">`).join('');
   $('dPaperSel').innerHTML = '<option value="">（无来源）</option>'
     + S.papers.map(p => `<option value="${p.id}">${esc(p.title)}${cite(p) ? ' — ' + esc(cite(p)) : ''}</option>`).join('')
     + '<option value="__new">＋ 新来源…</option>';
@@ -320,7 +335,7 @@ function cardHTML(c) {
       <div class="txt">
         ${c.content ? `<div class="content ${c.content.length > 500 ? 'long' : ''}" ${c.content.length > 500 ? 'data-act="expand"' : ''}>${esc(c.content)}</div>` : ''}
         ${c.note ? `<div class="note" data-act="note" title="点击编辑">${esc(c.note)}</div>` : `<div class="note add" data-act="note">+ 备注</div>`}
-        ${c.tags.length ? `<div class="tags">${c.tags.map(t => `<span class="chip">#${esc(t)}</span>`).join('')}</div>` : ''}
+        <div class="tags">${c.tags.map(t => `<span class="chip">#${esc(t)}<span class="x" data-act="rmtag" data-t="${esc(t)}" title="移除标签">×</span></span>`).join('')}<button class="addtag" data-act="addtag">+ 标签</button></div>
       </div>
     </div>
     <div class="src">${src}</div></div>`;
@@ -369,6 +384,12 @@ $('grid').addEventListener('click', async e => {
   if (act === 'zoom') { $('lightbox').querySelector('img').src = e.target.src; $('lightbox').classList.add('on'); }
   if (act === 'expand') e.target.classList.remove('long');
   if (act === 'note') editNote(e.target, c);
+  if (act === 'rmtag') {
+    c.tags = c.tags.filter(t => t !== e.target.dataset.t);
+    await api('/api/cards/' + c.id, { method: 'PUT', body: JSON.stringify({ tags: c.tags }) });
+    load();
+  }
+  if (act === 'addtag') addTagInline(e.target, c);
   if (act === 'edit') openCard(c);
   if (act === 'del' && confirm('删除这张卡片？')) { await api('/api/cards/' + c.id, { method: 'DELETE' }); load(); }
   if (act === 'copy') {
@@ -408,6 +429,50 @@ function editNote(el, c) {
   });
   ta.addEventListener('blur', () => finish(true));
 }
+// 卡片上直接加标签：回车添加（可连续加），Esc 或失焦结束；有已有标签自动补全
+function addTagInline(btn, c) {
+  const inp = document.createElement('input');
+  inp.className = 'tagin'; inp.setAttribute('list', 'tagSuggest'); inp.placeholder = '标签，回车添加';
+  btn.replaceWith(inp); inp.focus();
+  let done = false;
+  const finish = () => { if (!done) { done = true; render(); } };
+  inp.addEventListener('keydown', async e => {
+    if (e.key === 'Enter' && !e.isComposing) {
+      e.preventDefault();
+      const v = inp.value.trim().replace(/^#/, '');
+      if (!v) return finish();
+      if (!c.tags.includes(v)) {
+        c.tags.push(v);
+        await api('/api/cards/' + c.id, { method: 'PUT', body: JSON.stringify({ tags: c.tags }) });
+      }
+      inp.value = '';
+      const chip = document.createElement('span');
+      chip.className = 'chip'; chip.textContent = '#' + v;
+      inp.before(chip);
+      S.tags = await api('/api/tags');
+    }
+    if (e.key === 'Escape') finish();
+  });
+  inp.addEventListener('blur', () => setTimeout(finish, 150));
+}
+
+// 左栏管理标签：重命名（改成已有名字即合并）或从所有卡片删除
+async function manageTag(t) {
+  const v = prompt(`重命名标签「${t}」（改成已有的标签名会合并）\n留空并确定 = 从所有卡片中删除这个标签`, t);
+  if (v === null) return;
+  const nv = v.trim().replace(/^#/, '');
+  if (nv === t) return;
+  if (!nv) {
+    if (!confirm(`从所有卡片中删除标签「${t}」？卡片本身不会删除。`)) return;
+    await api('/api/tags/delete', { method: 'POST', body: JSON.stringify({ old: t }) });
+    if (S.tag === t) S.tag = null;
+  } else {
+    await api('/api/tags/rename', { method: 'POST', body: JSON.stringify({ old: t, new: nv }) });
+    if (S.tag === t) S.tag = nv;
+  }
+  toast('标签已更新'); load();
+}
+
 $('lightbox').onclick = () => $('lightbox').classList.remove('on');
 $('q').oninput = e => { S.q = e.target.value; render(); };
 
@@ -502,7 +567,7 @@ $('exportBtn').onclick = () => {
 
 load();
 window.addEventListener('focus', load);
-setInterval(() => { if (!document.hidden && !document.querySelector('dialog[open], .note-edit')) load(); }, 5000);
+setInterval(() => { if (!document.hidden && !document.querySelector('dialog[open], .note-edit, .tagin')) load(); }, 5000);
 </script>
 </body>
 </html>

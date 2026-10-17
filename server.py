@@ -573,6 +573,25 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
+        if path in ("/api/tags/rename", "/api/tags/delete"):
+            b = self.body()
+            old_t, new_t = (b.get("old") or "").strip(), (b.get("new") or "").strip()
+            if not old_t or (path.endswith("rename") and not new_t):
+                return self.send(400, {"error": "missing tag"})
+            n = 0
+            with _lock, db() as c:
+                for r in c.execute("SELECT id, tags FROM cards").fetchall():
+                    tags = json.loads(r["tags"] or "[]")
+                    if old_t not in tags:
+                        continue
+                    out = []
+                    for t in tags:
+                        t = new_t if (t == old_t and path.endswith("rename")) else t
+                        if t != old_t and t not in out:   # 删除 / 合并后去重
+                            out.append(t)
+                    c.execute("UPDATE cards SET tags=? WHERE id=?", (json.dumps(out, ensure_ascii=False), r["id"]))
+                    n += 1
+            return self.send(200, {"cards": n})
         if path == "/api/watch/start":
             _watch.update(prev=None, saved=None)
             return self.send(200, {"ok": True})
