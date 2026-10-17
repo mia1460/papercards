@@ -108,6 +108,8 @@ body.quad-mode .grid { flex: 1; min-height: 0; }
 .pbody.h { display: flex; gap: 12px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; align-items: stretch; }
 .pbody.h .hcell { flex: 0 0 calc((100% - (var(--hn, 1) - 1) * 12px) / var(--hn, 1)); max-height: 100%; overflow-y: auto; scroll-snap-align: start; overscroll-behavior: contain; }
 .pbody.h .hcell .card { margin: 0; }
+.card.cur { box-shadow: 0 0 0 2px var(--t), 0 6px 18px rgba(0,0,0,.08); }
+.pane.active header { background: linear-gradient(var(--panel), var(--panel)), var(--t); box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--t) 35%, transparent); }
 .pempty { color: var(--muted); text-align: center; padding: 40px 0; font-size: 13px; }
 @media (max-width: 760px) { body.quad-mode main { height: auto; overflow: visible; } .quad, .qcol { display: block; } .qsplit { display: none; } .qcell { display: block; margin-bottom: 14px; } .pane { height: 70vh; } }
 .masonry .col { flex: 1; min-width: 0; }
@@ -205,6 +207,7 @@ dialog img { max-width: 100%; max-height: 220px; display: block; margin: 0 auto;
         <option value="new">最新在前</option><option value="old">最早在前</option>
       </select>
       <div class="seg" id="layout"></div>
+      <button class="btn" id="quadReset" title="四个区恢复平分，并全部切回上下滚动" style="display:none">重置布局</button>
       <div class="seg" id="size"></div>
       <span class="sp"></span>
       <button class="btn" id="exportBtn">导出 Markdown（zip）</button>
@@ -366,10 +369,14 @@ function render() {
   }
   document.body.classList.toggle('quad-mode', S.layout === 'quad');
   $('group').style.display = S.layout === 'quad' ? 'none' : '';   // 四分本身就是按类型分区
+  $('quadReset').style.display = S.layout === 'quad' ? '' : 'none';
   if (S.layout === 'quad') return renderQuad();
   if (!cards.length) { $('grid').innerHTML = '<div class="empty">没有匹配的卡片</div>'; return; }
-  $('grid').innerHTML = groupCards(cards).map(g =>
+  const groups = groupCards(cards);
+  navOrder = { all: groups.flatMap(g => g.cards.map(c => c.id)) };
+  $('grid').innerHTML = groups.map(g =>
     (g.title ? `<div class="group">${esc(g.title)}<span class="n">${g.cards.length} 张</span></div>` : '') + layoutHTML(g.cards)).join('');
+  markCurrent(false);
 }
 
 function sortCards(cards) {
@@ -399,8 +406,10 @@ function renderQuad() {
   const all = sortCards(filtered(true));
   $('count').textContent = `${all.length} 张卡片`;
   const R = S.quadRatio, ord = orderedTypes();
+  navOrder = {};
   const paneHTML = ([k, v], w) => {
     const cs = all.filter(c => c.type === k);
+    navOrder[k] = cs.map(c => c.id);
     const h = S.paneMode[k] === 'h';
     const body = !cs.length ? '<div class="pempty">暂无</div>'
       : h ? cs.map(c => `<div class="hcell">${cardHTML(c)}</div>`).join('') : masonryHTML(cs, w);
@@ -430,7 +439,52 @@ function renderQuad() {
     if (k) { el.scrollTop = k[0]; el.scrollLeft = k[1]; }
     if (el.classList.contains('h')) { updatePager(el); el.addEventListener('scroll', () => updatePager(el), { passive: true }); }
   });
+  $('grid').querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.dataset.t === activePane()));
+  markCurrent(false);
 }
+
+// ---- 键盘 ← → 在卡片间切换（四分布局下作用于当前区：鼠标所在或最近点击的区）
+let navOrder = {}, curCard = {}, activePaneKey = null;
+const activePane = () => activePaneKey || typeOrder[0];
+const navKey = () => S.layout === 'quad' ? activePane() : 'all';
+function markCurrent(scroll) {
+  $('grid').querySelectorAll('.card.cur').forEach(el => el.classList.remove('cur'));
+  const key = navKey(), id = curCard[key];
+  if (!id) return;
+  const scope = S.layout === 'quad' ? $('grid').querySelector(`.pane[data-t="${key}"]`) : $('grid');
+  const el = scope && scope.querySelector(`.card[data-id="${id}"]`);
+  if (!el) return;
+  el.classList.add('cur');
+  if (scroll) el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+}
+function setActivePane(k) {
+  if (S.layout !== 'quad' || k === activePaneKey) return;
+  activePaneKey = k;
+  $('grid').querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.dataset.t === k));
+  markCurrent(false);
+}
+$('grid').addEventListener('mouseover', e => { const p = e.target.closest('.pane'); if (p) setActivePane(p.dataset.t); });
+$('grid').addEventListener('mousedown', e => {
+  const p = e.target.closest('.pane'); if (p) setActivePane(p.dataset.t);
+  const c = e.target.closest('.card');   // 点卡片即设为当前卡片
+  if (c) { curCard[navKey()] = +c.dataset.id; markCurrent(false); }
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]')) return;
+  const key = navKey(), ids = navOrder[key] || [];
+  if (!ids.length) return;
+  e.preventDefault();
+  const i = ids.indexOf(curCard[key]);
+  const next = i < 0 ? 0 : Math.max(0, Math.min(ids.length - 1, i + (e.key === 'ArrowRight' ? 1 : -1)));
+  curCard[key] = ids[next];
+  markCurrent(true);
+});
+$('quadReset').onclick = () => {
+  S.quadRatio = { col: 50, left: 50, right: 50 };
+  S.paneMode = {};
+  saveView(); render(); toast('四分布局已重置');
+};
 // 拖动分隔条调整四分比例：拖竖线改左右宽度，拖横线改该列上下高度；其余区自动填满
 $('grid').addEventListener('mousedown', e => {
   const sp = e.target.closest('.qsplit');
