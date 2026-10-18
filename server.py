@@ -505,7 +505,7 @@ def rich_to_markdown(raw):
         if not t:
             return
         if ul:
-            t = f'<u style="text-decoration-color:{HL_COLORS[ul]}">{t}</u>' if ul in HL_COLORS else f"<u>{t}</u>"
+            t = f'<u style="text-decoration-color:{HL_COLORS[ul]};text-decoration-skip-ink:none">{t}</u>' if ul in HL_COLORS else f'<u style="text-decoration-skip-ink:none">{t}</u>'
         if hl:
             t = f'<mark style="background:{HL_COLORS[hl]}">{t}</mark>'
         out.append(t)

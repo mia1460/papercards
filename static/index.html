@@ -165,7 +165,7 @@ body.quad-mode .grid { flex: 1; min-height: 0; }
 .card .content mark { color: inherit; border-radius: 2px; padding: 0 1px; }
 .hl-yellow { background: rgba(255, 212, 0, .5); } .hl-red { background: rgba(255, 102, 102, .45); }
 .hl-green { background: rgba(95, 178, 54, .42); } .hl-blue { background: rgba(46, 168, 229, .42); } .hl-purple { background: rgba(162, 138, 229, .45); }
-.card .content u { text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.card .content u { text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: .3em; text-decoration-skip-ink: none; }
 .ul-yellow { text-decoration-color: #e6b800 !important; } .ul-red { text-decoration-color: #ff6666 !important; }
 .ul-green { text-decoration-color: #5fb236 !important; } .ul-blue { text-decoration-color: #2ea8e5 !important; } .ul-purple { text-decoration-color: #a28ae5 !important; }
 #hlbar { position: fixed; z-index: 20; display: none; align-items: center; gap: 4px; padding: 5px 7px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
@@ -853,7 +853,7 @@ function richHTML(raw) {
 function richMarkdown(raw) {   // 复制 / 导出用：带颜色的 <mark> 和 <u>
   return parseRich(raw).map(s => {
     let t = s.text;
-    if (s.ul) t = HL[s.ul] ? `<u style="text-decoration-color:${HL[s.ul]}">${t}</u>` : `<u>${t}</u>`;
+    if (s.ul) t = `<u style="${HL[s.ul] ? `text-decoration-color:${HL[s.ul]};` : ''}text-decoration-skip-ink:none">${t}</u>`;
     if (s.hl) t = `<mark style="background:${HL[s.hl]}">${t}</mark>`;
     return t;
   }).join('');
