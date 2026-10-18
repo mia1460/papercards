@@ -175,7 +175,8 @@ body.quad-mode .grid { flex: 1; min-height: 0; }
 #hlbar[data-mode=ul] button[data-color]:not(.none) { background: none; box-shadow: inset 0 -4px 0 var(--c), inset 0 0 0 1px var(--line); border-radius: 4px; }
 #hlbar button.none { background: #fff linear-gradient(135deg, transparent 45%, #e5484d 45%, #e5484d 55%, transparent 55%); }
 #hlbar .mode { display: flex; background: var(--chip); border-radius: 7px; padding: 2px; margin-right: 4px; }
-#hlbar .mode button { width: auto; height: 22px; padding: 0 8px; font-size: 12px; color: var(--muted); }
+#hlbar .mode button { width: 28px; height: 24px; padding: 0; color: var(--muted); display: flex; align-items: center; justify-content: center; }
+#hlbar .mode button svg { display: block; }
 #hlbar .mode button.on { background: var(--panel); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
 #hlbar .mode button:hover { outline: 0; color: var(--ink); }
 #hlbar button:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -884,12 +885,19 @@ const hlbar = document.createElement('div');
 hlbar.id = 'hlbar';
 let hlMode = 'hl';
 try { hlMode = localStorage.getItem('papercards.hlMode') === 'ul' ? 'ul' : 'hl'; } catch (e) {}
-hlbar.innerHTML = '<span class="mode"><button data-mode="hl" title="高亮">高亮</button><button data-mode="ul" title="下划线"><u>下划线</u></button></span>'
+// 图标：高亮 = 涂色方块；下划线 = U 下一横。颜色跟随最近一次使用的颜色
+const ICON_HL = '<svg viewBox="0 0 16 16" width="16" height="16"><rect x="2" y="2" width="12" height="12" rx="2.5" fill="var(--hlc)" fill-opacity=".85" stroke="currentColor" stroke-opacity=".35"/></svg>';
+const ICON_UL = '<svg viewBox="0 0 16 16" width="16" height="16"><path d="M4.5 2.5v5a3.5 3.5 0 0 0 7 0v-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="3" y="12.6" width="10" height="1.8" rx=".9" fill="var(--ulc)"/></svg>';
+let lastColor = { hl: 'yellow', ul: 'red' };
+try { Object.assign(lastColor, JSON.parse(localStorage.getItem('papercards.hlColors') || '{}')); } catch (e) {}
+hlbar.innerHTML = `<span class="mode"><button data-mode="hl" title="高亮">${ICON_HL}</button><button data-mode="ul" title="下划线">${ICON_UL}</button></span>`
   + Object.entries(HL).map(([k, v]) => `<button data-color="${k}" style="--c:${v}"></button>`).join('')
   + '<button data-color="none" class="none" title="透明：去掉当前工具的格式"></button>'
   + '<span class="sep"></span><button data-clear="1" title="清除高亮和下划线">✕</button>';
 function syncHlbar() {
   hlbar.dataset.mode = hlMode;
+  hlbar.style.setProperty('--hlc', HL[lastColor.hl] || HL.yellow);
+  hlbar.style.setProperty('--ulc', HL[lastColor.ul] || HL.red);
   hlbar.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === hlMode));
   hlbar.querySelectorAll('[data-color]').forEach(b => { b.title = b.dataset.color === 'none' ? `透明：去掉${hlMode === 'hl' ? '高亮' : '下划线'}` : (hlMode === 'hl' ? '高亮' : '下划线'); });
 }
@@ -932,6 +940,10 @@ hlbar.addEventListener('click', async e => {
     return;
   }
   const col = b.dataset.color === 'none' ? null : b.dataset.color;
+  if (col) {   // 记住最近用的颜色，用在工具图标上
+    lastColor[hlMode] = col; syncHlbar();
+    try { localStorage.setItem('papercards.hlColors', JSON.stringify(lastColor)); } catch (e) {}
+  }
   const fmt = b.dataset.clear ? { clear: true } : hlMode === 'hl' ? { hl: col } : { ul: col };
   const next = applyRich(c.content, hlTarget.a, hlTarget.b, fmt);
   hlbar.classList.remove('on'); window.getSelection().removeAllRanges();
