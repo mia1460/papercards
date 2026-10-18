@@ -499,25 +499,27 @@ HL_COLORS = {"yellow": "#ffd400", "red": "#ff6666", "green": "#5fb236", "blue": 
 
 def rich_to_markdown(raw):
     """卡片内容里的 =={color}高亮== / ++下划线++ 转成导出用的 <mark> / <u>。"""
-    out, hl, ul, last = [], None, False, 0
+    out, hl, ul, last = [], None, None, 0
 
     def push(t):
         if not t:
             return
         if ul:
-            t = f"<u>{t}</u>"
+            t = f'<u style="text-decoration-color:{HL_COLORS[ul]}">{t}</u>' if ul in HL_COLORS else f"<u>{t}</u>"
         if hl:
             t = f'<mark style="background:{HL_COLORS[hl]}">{t}</mark>'
         out.append(t)
-    for m in re.finditer(r"==\{(\w+)\}|==|\+\+", raw):
+    for m in re.finditer(r"==\{(\w+)\}|==|\+\+\{(\w+)\}|\+\+", raw):
         push(raw[last:m.start()])
         last = m.end()
         if m.group(1):
             hl = m.group(1) if m.group(1) in HL_COLORS else "yellow"
         elif m.group(0) == "==":
             hl = None if hl else "yellow"
+        elif m.group(2):
+            ul = m.group(2) if m.group(2) in HL_COLORS else "default"
         else:
-            ul = not ul
+            ul = None if ul else "default"
     push(raw[last:])
     return "".join(out)
 

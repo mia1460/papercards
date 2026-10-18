@@ -166,10 +166,18 @@ body.quad-mode .grid { flex: 1; min-height: 0; }
 .hl-yellow { background: rgba(255, 212, 0, .5); } .hl-red { background: rgba(255, 102, 102, .45); }
 .hl-green { background: rgba(95, 178, 54, .42); } .hl-blue { background: rgba(46, 168, 229, .42); } .hl-purple { background: rgba(162, 138, 229, .45); }
 .card .content u { text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.ul-yellow { text-decoration-color: #e6b800 !important; } .ul-red { text-decoration-color: #ff6666 !important; }
+.ul-green { text-decoration-color: #5fb236 !important; } .ul-blue { text-decoration-color: #2ea8e5 !important; } .ul-purple { text-decoration-color: #a28ae5 !important; }
 #hlbar { position: fixed; z-index: 20; display: none; align-items: center; gap: 4px; padding: 5px 7px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
 #hlbar.on { display: flex; }
 #hlbar button { width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: var(--ink); font-size: 13px; cursor: pointer; padding: 0; }
-#hlbar button[data-hl] { background: var(--c); border-radius: 50%; width: 20px; height: 20px; margin: 2px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+#hlbar button[data-color] { background: var(--c); border-radius: 50%; width: 20px; height: 20px; margin: 2px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+#hlbar[data-mode=ul] button[data-color]:not(.none) { background: none; box-shadow: inset 0 -4px 0 var(--c), inset 0 0 0 1px var(--line); border-radius: 4px; }
+#hlbar button.none { background: #fff linear-gradient(135deg, transparent 45%, #e5484d 45%, #e5484d 55%, transparent 55%); }
+#hlbar .mode { display: flex; background: var(--chip); border-radius: 7px; padding: 2px; margin-right: 4px; }
+#hlbar .mode button { width: auto; height: 22px; padding: 0 8px; font-size: 12px; color: var(--muted); }
+#hlbar .mode button.on { background: var(--panel); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+#hlbar .mode button:hover { outline: 0; color: var(--ink); }
 #hlbar button:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
 #hlbar .sep { width: 1px; height: 18px; background: var(--line); margin: 0 2px; }
 .card .content:hover { outline: 1px solid var(--line); outline-offset: 3px; border-radius: 3px; }
@@ -808,17 +816,18 @@ $('grid').addEventListener('click', async e => {
 });
 // 点击备注直接编辑：失焦或回车保存，⇧回车换行，Esc 取消
 // ---- 文字高亮 / 下划线（参照 Zotero）
-// 存储标记：=={color}文字==（不写颜色为黄色）、++文字++（下划线），可嵌套：=={red}++文字++==
+// 存储标记：=={color}文字==（不写颜色为黄色）、++{color}文字++（下划线，不写颜色为默认强调色），可嵌套：=={red}++{blue}文字++==
 const HL = { yellow: '#ffd400', red: '#ff6666', green: '#5fb236', blue: '#2ea8e5', purple: '#a28ae5' };
 function parseRich(raw) {
-  const segs = []; let hl = null, ul = false, last = 0, m;
-  const re = /==\{(\w+)\}|==|\+\+/g;
+  const segs = []; let hl = null, ul = null, last = 0, m;
+  const re = /==\{(\w+)\}|==|\+\+\{(\w+)\}|\+\+/g;
   const push = t => { if (t) segs.push({ text: t, hl, ul }); };
   while ((m = re.exec(raw))) {
     push(raw.slice(last, m.index)); last = re.lastIndex;
     if (m[1]) hl = HL[m[1]] ? m[1] : 'yellow';
     else if (m[0] === '==') hl = hl ? null : 'yellow';
-    else ul = !ul;
+    else if (m[2]) ul = HL[m[2]] ? m[2] : 'default';
+    else ul = ul ? null : 'default';
   }
   push(raw.slice(last));
   return segs;
@@ -829,13 +838,14 @@ function serializeRich(segs) {
     const prev = out[out.length - 1];
     if (prev && prev.hl === s.hl && prev.ul === s.ul) prev.text += s.text; else out.push({ ...s });
   });
-  return out.map(s => (s.hl ? (s.hl === 'yellow' ? '==' : `=={${s.hl}}`) : '') + (s.ul ? '++' : '') + s.text + (s.ul ? '++' : '') + (s.hl ? '==' : '')).join('');
+  const ulOpen = u => u === 'default' ? '++' : `++{${u}}`;
+  return out.map(s => (s.hl ? (s.hl === 'yellow' ? '==' : `=={${s.hl}}`) : '') + (s.ul ? ulOpen(s.ul) : '') + s.text + (s.ul ? '++' : '') + (s.hl ? '==' : '')).join('');
 }
 const plainText = raw => parseRich(raw).map(s => s.text).join('');
 function richHTML(raw) {
   return parseRich(raw).map(s => {
     let h = esc(s.text);
-    if (s.ul) h = `<u>${h}</u>`;
+    if (s.ul) h = `<u class="ul-${s.ul}">${h}</u>`;
     if (s.hl) h = `<mark class="hl-${s.hl}">${h}</mark>`;
     return h;
   }).join('');
@@ -843,7 +853,7 @@ function richHTML(raw) {
 function richMarkdown(raw) {   // 复制 / 导出用：带颜色的 <mark> 和 <u>
   return parseRich(raw).map(s => {
     let t = s.text;
-    if (s.ul) t = `<u>${t}</u>`;
+    if (s.ul) t = HL[s.ul] ? `<u style="text-decoration-color:${HL[s.ul]}">${t}</u>` : `<u>${t}</u>`;
     if (s.hl) t = `<mark style="background:${HL[s.hl]}">${t}</mark>`;
     return t;
   }).join('');
@@ -863,14 +873,27 @@ function applyRich(raw, a, b, fmt) {
     const off = fmt.hl && inSel.every(s => s.hl === fmt.hl);
     inSel.forEach(s => { s.hl = off ? null : fmt.hl; });
   }
-  if (fmt.ul) { const off = inSel.every(s => s.ul); inSel.forEach(s => { s.ul = !off; }); }
-  if (fmt.clear) inSel.forEach(s => { s.hl = null; s.ul = false; });
+  if (fmt.ul !== undefined) {
+    const off = fmt.ul && inSel.every(s => s.ul === fmt.ul);
+    inSel.forEach(s => { s.ul = off ? null : fmt.ul; });
+  }
+  if (fmt.clear) inSel.forEach(s => { s.hl = null; s.ul = null; });
   return serializeRich(segs);
 }
 const hlbar = document.createElement('div');
 hlbar.id = 'hlbar';
-hlbar.innerHTML = Object.entries(HL).map(([k, v]) => `<button data-hl="${k}" style="--c:${v}" title="高亮"></button>`).join('')
-  + '<span class="sep"></span><button data-ul="1" title="下划线"><u>U</u></button><button data-clear="1" title="清除格式">✕</button>';
+let hlMode = 'hl';
+try { hlMode = localStorage.getItem('papercards.hlMode') === 'ul' ? 'ul' : 'hl'; } catch (e) {}
+hlbar.innerHTML = '<span class="mode"><button data-mode="hl" title="高亮">高亮</button><button data-mode="ul" title="下划线"><u>下划线</u></button></span>'
+  + Object.entries(HL).map(([k, v]) => `<button data-color="${k}" style="--c:${v}"></button>`).join('')
+  + '<button data-color="none" class="none" title="透明：去掉当前工具的格式"></button>'
+  + '<span class="sep"></span><button data-clear="1" title="清除高亮和下划线">✕</button>';
+function syncHlbar() {
+  hlbar.dataset.mode = hlMode;
+  hlbar.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === hlMode));
+  hlbar.querySelectorAll('[data-color]').forEach(b => { b.title = b.dataset.color === 'none' ? `透明：去掉${hlMode === 'hl' ? '高亮' : '下划线'}` : (hlMode === 'hl' ? '高亮' : '下划线'); });
+}
+syncHlbar();
 document.body.appendChild(hlbar);
 let hlTarget = null;
 function selInContent() {
@@ -903,11 +926,17 @@ hlbar.addEventListener('click', async e => {
   if (!b || !hlTarget) return;
   const c = S.cards.find(x => x.id === +hlTarget.el.closest('.card').dataset.id);
   if (!c) return;
-  const fmt = b.dataset.hl ? { hl: b.dataset.hl } : b.dataset.ul ? { ul: true } : { clear: true };
+  if (b.dataset.mode) {   // 切换工具：不关闭工具条，保留选区
+    hlMode = b.dataset.mode; syncHlbar();
+    try { localStorage.setItem('papercards.hlMode', hlMode); } catch (e) {}
+    return;
+  }
+  const col = b.dataset.color === 'none' ? null : b.dataset.color;
+  const fmt = b.dataset.clear ? { clear: true } : hlMode === 'hl' ? { hl: col } : { ul: col };
   const next = applyRich(c.content, hlTarget.a, hlTarget.b, fmt);
   hlbar.classList.remove('on'); window.getSelection().removeAllRanges();
   if (next === c.content) return;
-  recordEdit(c, c.content, next, fmt.clear ? '清除格式' : fmt.ul ? '下划线' : '高亮');
+  recordEdit(c, c.content, next, fmt.clear ? '清除格式' : (hlMode === 'hl' ? '高亮' : '下划线') + (col ? '' : '（去掉）'));
   await setContent(c.id, next);
 });
 
