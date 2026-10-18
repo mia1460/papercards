@@ -907,9 +907,33 @@ hlbar.addEventListener('click', async e => {
   const next = applyRich(c.content, hlTarget.a, hlTarget.b, fmt);
   hlbar.classList.remove('on'); window.getSelection().removeAllRanges();
   if (next === c.content) return;
-  c.content = next;
-  render();
-  await api('/api/cards/' + c.id, { method: 'PUT', body: JSON.stringify({ content: next }) });
+  recordEdit(c, c.content, next, fmt.clear ? '清除格式' : fmt.ul ? '下划线' : '高亮');
+  await setContent(c.id, next);
+});
+
+// ---- ⌘Z / Ctrl+Z 撤销高亮、下划线、内容修改；⌘⇧Z 重做
+const undoStack = [], redoStack = [];
+function recordEdit(c, before, after, label) {
+  undoStack.push({ id: c.id, before, after, label });
+  if (undoStack.length > 50) undoStack.shift();
+  redoStack.length = 0;
+}
+async function setContent(id, value) {
+  const c = S.cards.find(x => x.id === id);
+  if (c) { c.content = value; render(); }
+  await api('/api/cards/' + id, { method: 'PUT', body: JSON.stringify({ content: value }) });
+}
+document.addEventListener('keydown', async e => {
+  if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z' || e.altKey) return;
+  if (e.target.closest('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]')) return;
+  const from = e.shiftKey ? redoStack : undoStack, to = e.shiftKey ? undoStack : redoStack;
+  const op = from.pop();
+  e.preventDefault();
+  if (!op) return toast(e.shiftKey ? '没有可重做的操作' : '没有可撤销的操作');
+  to.push(op);
+  hlbar.classList.remove('on');
+  await setContent(op.id, e.shiftKey ? op.after : op.before);
+  toast(`${e.shiftKey ? '已重做' : '已撤销'}：${op.label}`);
 });
 
 // 双击内容直接编辑（单击长内容仍是展开全文）：回车换行，⌘回车或失焦保存，Esc 取消
@@ -932,6 +956,7 @@ function editContent(el, c) {
   const finish = async save => {
     if (done) return; done = true;
     if (save && ta.value !== (c.content || '')) {
+      recordEdit(c, c.content || '', ta.value, '内容修改');
       c.content = ta.value;
       await api('/api/cards/' + c.id, { method: 'PUT', body: JSON.stringify({ content: ta.value }) });
     }
