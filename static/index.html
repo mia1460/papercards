@@ -162,6 +162,16 @@ body.quad-mode .grid { flex: 1; min-height: 0; }
 .card .note.add { background: none; color: var(--muted); padding: 2px 0; opacity: 0; }
 .card:hover .note.add { opacity: 1; }
 .card .content { cursor: text; }
+.card .content mark { color: inherit; border-radius: 2px; padding: 0 1px; }
+.hl-yellow { background: rgba(255, 212, 0, .5); } .hl-red { background: rgba(255, 102, 102, .45); }
+.hl-green { background: rgba(95, 178, 54, .42); } .hl-blue { background: rgba(46, 168, 229, .42); } .hl-purple { background: rgba(162, 138, 229, .45); }
+.card .content u { text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+#hlbar { position: fixed; z-index: 20; display: none; align-items: center; gap: 4px; padding: 5px 7px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+#hlbar.on { display: flex; }
+#hlbar button { width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: var(--ink); font-size: 13px; cursor: pointer; padding: 0; }
+#hlbar button[data-hl] { background: var(--c); border-radius: 50%; width: 20px; height: 20px; margin: 2px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+#hlbar button:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+#hlbar .sep { width: 1px; height: 18px; background: var(--line); margin: 0 2px; }
 .card .content:hover { outline: 1px solid var(--line); outline-offset: 3px; border-radius: 3px; }
 .card textarea.note-edit.content-edit { font: 14.5px/1.6 Georgia, "Songti SC", serif; margin-top: 0; max-height: 60vh; }
 .card textarea.note-edit { display: block; width: 100%; margin-top: 8px; font: 13px/1.5 inherit; font-family: inherit; color: var(--ink); background: var(--bg);
@@ -270,6 +280,7 @@ dialog img { max-width: 100%; max-height: 220px; display: block; margin: 0 auto;
 <div class="lightbox" id="lightbox"><img></div>
 <div class="toast" id="toast"></div>
 
+<script src="/static/annot.js"></script>
 <script>
 const TYPES = { quote: '摘录', figure: '图表', data: '数据', idea: '想法' };
 // 类型的显示顺序：默认想法在前，可在顶部按钮上拖动调整（记在浏览器里）
@@ -685,11 +696,11 @@ function cardHTML(c) {
     : `<span class="nosrc" data-act="edit">+ 添加来源</span>`;
   return `<div class="card" data-t="${c.type}" data-id="${c.id}">
     <div class="head"><span class="type">${TYPES[c.type] || c.type}</span><span title="创建时间">${fmtTime(c.created_at)}</span>
-      <span class="acts"><button data-act="copy" title="复制为带引用的 Markdown">复制</button><button data-act="edit">编辑</button><button data-act="del">删除</button></span></div>
+      <span class="acts">${c.image ? '<button data-act="annot" title="在图片上画框、箭头、文字、马赛克">标注</button>' : ''}<button data-act="copy" title="复制为带引用的 Markdown">复制</button><button data-act="edit">编辑</button><button data-act="del">删除</button></span></div>
     <div class="body">
       ${c.image ? `<img src="/images/${c.image}" loading="lazy" data-act="zoom" ${c.img_w ? `width="${c.img_w}" height="${c.img_h}" style="aspect-ratio:${c.img_w}/${c.img_h}"` : ''}>` : ''}
       <div class="txt">
-        ${c.content ? `<div class="content ${c.content.length > 500 ? 'long' : ''}" ${c.content.length > 500 ? 'data-act="expand"' : ''} title="${c.content.length > 500 ? '单击展开全文，' : ''}双击编辑">${esc(c.content)}</div>` : ''}
+        ${c.content ? (() => { const long = plainText(c.content).length > 500; return `<div class="content ${long ? 'long' : ''}" ${long ? 'data-act="expand"' : ''} title="${long ? '单击展开全文，' : ''}选中文字可高亮，双击编辑">${richHTML(c.content)}</div>`; })() : ''}
         ${c.note ? `<div class="note" data-act="note" title="点击编辑">${esc(c.note)}</div>` : `<div class="note add" data-act="note">+ 备注</div>`}
         <div class="tags">${c.tags.map(t => `<span class="chip">#${esc(t)}<span class="x" data-act="rmtag" data-t="${esc(t)}" title="移除标签">×</span></span>`).join('')}<button class="addtag" data-act="addtag">+ 标签</button></div>
       </div>
@@ -783,11 +794,12 @@ $('grid').addEventListener('click', async e => {
   if (act === 'addtag') addTagInline(e.target, c);
   if (act === 'edit') openCard(c);
   if (act === 'del' && confirm('删除这张卡片？')) { await api('/api/cards/' + c.id, { method: 'DELETE' }); load(); }
+  if (act === 'annot') openAnnotator(c, () => { toast('标注已保存'); load(true); });
   if (act === 'copy') {
     const loc = c.paper ? ` (${cite(c.paper)}${c.page ? ', p. ' + c.page : ''})` : '';
     const parts = [];
     if (c.image) parts.push(`![](${location.origin}/images/${c.image})`);
-    if (c.content) parts.push(c.content.split('\n').map(l => '> ' + l).join('\n') + loc);
+    if (c.content) parts.push(richMarkdown(c.content).split('\n').map(l => '> ' + l).join('\n') + loc);
     else if (loc) parts.push(loc.trim());
     if (c.note) parts.push(c.note);
     await navigator.clipboard.writeText(parts.join('\n\n'));
@@ -795,6 +807,111 @@ $('grid').addEventListener('click', async e => {
   }
 });
 // 点击备注直接编辑：失焦或回车保存，⇧回车换行，Esc 取消
+// ---- 文字高亮 / 下划线（参照 Zotero）
+// 存储标记：=={color}文字==（不写颜色为黄色）、++文字++（下划线），可嵌套：=={red}++文字++==
+const HL = { yellow: '#ffd400', red: '#ff6666', green: '#5fb236', blue: '#2ea8e5', purple: '#a28ae5' };
+function parseRich(raw) {
+  const segs = []; let hl = null, ul = false, last = 0, m;
+  const re = /==\{(\w+)\}|==|\+\+/g;
+  const push = t => { if (t) segs.push({ text: t, hl, ul }); };
+  while ((m = re.exec(raw))) {
+    push(raw.slice(last, m.index)); last = re.lastIndex;
+    if (m[1]) hl = HL[m[1]] ? m[1] : 'yellow';
+    else if (m[0] === '==') hl = hl ? null : 'yellow';
+    else ul = !ul;
+  }
+  push(raw.slice(last));
+  return segs;
+}
+function serializeRich(segs) {
+  const out = [];
+  segs.forEach(s => {
+    const prev = out[out.length - 1];
+    if (prev && prev.hl === s.hl && prev.ul === s.ul) prev.text += s.text; else out.push({ ...s });
+  });
+  return out.map(s => (s.hl ? (s.hl === 'yellow' ? '==' : `=={${s.hl}}`) : '') + (s.ul ? '++' : '') + s.text + (s.ul ? '++' : '') + (s.hl ? '==' : '')).join('');
+}
+const plainText = raw => parseRich(raw).map(s => s.text).join('');
+function richHTML(raw) {
+  return parseRich(raw).map(s => {
+    let h = esc(s.text);
+    if (s.ul) h = `<u>${h}</u>`;
+    if (s.hl) h = `<mark class="hl-${s.hl}">${h}</mark>`;
+    return h;
+  }).join('');
+}
+function richMarkdown(raw) {   // 复制 / 导出用：带颜色的 <mark> 和 <u>
+  return parseRich(raw).map(s => {
+    let t = s.text;
+    if (s.ul) t = `<u>${t}</u>`;
+    if (s.hl) t = `<mark style="background:${HL[s.hl]}">${t}</mark>`;
+    return t;
+  }).join('');
+}
+// 对纯文本区间 [a, b) 应用格式；同色再点一次 = 取消
+function applyRich(raw, a, b, fmt) {
+  const segs = []; let pos = 0;
+  parseRich(raw).forEach(s => {
+    const end = pos + s.text.length;
+    [[pos, Math.min(end, a)], [Math.max(pos, a), Math.min(end, b)], [Math.max(pos, b), end]].forEach(([x, y], i) => {
+      if (y > x) segs.push({ ...s, text: s.text.slice(x - pos, y - pos), sel: i === 1 });
+    });
+    pos = end;
+  });
+  const inSel = segs.filter(s => s.sel);
+  if (fmt.hl !== undefined) {
+    const off = fmt.hl && inSel.every(s => s.hl === fmt.hl);
+    inSel.forEach(s => { s.hl = off ? null : fmt.hl; });
+  }
+  if (fmt.ul) { const off = inSel.every(s => s.ul); inSel.forEach(s => { s.ul = !off; }); }
+  if (fmt.clear) inSel.forEach(s => { s.hl = null; s.ul = false; });
+  return serializeRich(segs);
+}
+const hlbar = document.createElement('div');
+hlbar.id = 'hlbar';
+hlbar.innerHTML = Object.entries(HL).map(([k, v]) => `<button data-hl="${k}" style="--c:${v}" title="高亮"></button>`).join('')
+  + '<span class="sep"></span><button data-ul="1" title="下划线"><u>U</u></button><button data-clear="1" title="清除格式">✕</button>';
+document.body.appendChild(hlbar);
+let hlTarget = null;
+function selInContent() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount || sel.isCollapsed) return null;
+  const r = sel.getRangeAt(0);
+  const el = (r.commonAncestorContainer.nodeType === 1 ? r.commonAncestorContainer : r.commonAncestorContainer.parentElement).closest('.card .content');
+  if (!el) return null;
+  const off = (node, o) => { const x = document.createRange(); x.setStart(el, 0); x.setEnd(node, o); return x.toString().length; };
+  const a = off(r.startContainer, r.startOffset), b = off(r.endContainer, r.endOffset);
+  return b > a ? { el, a, b, rect: r.getBoundingClientRect() } : null;
+}
+document.addEventListener('mouseup', e => {
+  if (e.target.closest('#hlbar')) return;
+  setTimeout(() => {
+    hlTarget = selInContent();
+    if (!hlTarget) return hlbar.classList.remove('on');
+    const { rect } = hlTarget;
+    hlbar.classList.add('on');
+    const w = hlbar.offsetWidth;
+    hlbar.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, rect.left + rect.width / 2 - w / 2)) + 'px';
+    hlbar.style.top = (rect.top > 50 ? rect.top - 44 : rect.bottom + 8) + 'px';
+  }, 0);
+});
+document.addEventListener('mousedown', e => { if (!e.target.closest('#hlbar')) hlbar.classList.remove('on'); });
+document.addEventListener('scroll', () => hlbar.classList.remove('on'), true);
+hlbar.addEventListener('mousedown', e => e.preventDefault());   // 保持选区
+hlbar.addEventListener('click', async e => {
+  const b = e.target.closest('button');
+  if (!b || !hlTarget) return;
+  const c = S.cards.find(x => x.id === +hlTarget.el.closest('.card').dataset.id);
+  if (!c) return;
+  const fmt = b.dataset.hl ? { hl: b.dataset.hl } : b.dataset.ul ? { ul: true } : { clear: true };
+  const next = applyRich(c.content, hlTarget.a, hlTarget.b, fmt);
+  hlbar.classList.remove('on'); window.getSelection().removeAllRanges();
+  if (next === c.content) return;
+  c.content = next;
+  render();
+  await api('/api/cards/' + c.id, { method: 'PUT', body: JSON.stringify({ content: next }) });
+});
+
 // 双击内容直接编辑（单击长内容仍是展开全文）：回车换行，⌘回车或失焦保存，Esc 取消
 $('grid').addEventListener('dblclick', e => {
   const el = e.target.closest('.card .content');

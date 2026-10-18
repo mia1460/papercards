@@ -71,6 +71,11 @@ def init_db():
         # 老数据库升级：来源标签（会议、团队等）
         if "tags" not in [r[1] for r in c.execute("PRAGMA table_info(papers)")]:
             c.execute("ALTER TABLE papers ADD COLUMN tags TEXT")
+        # 图片标注：原图 + 标注图形（JSON），image 字段存渲染后的带标注图片
+        card_cols = [r[1] for r in c.execute("PRAGMA table_info(cards)")]
+        for col in ("image_orig", "annot"):
+            if col not in card_cols:
+                c.execute(f"ALTER TABLE cards ADD COLUMN {col} TEXT")
 
 
 def paper_dict(r):
@@ -489,6 +494,32 @@ def bibtex(p):
 
 
 TYPE_LABELS = {"quote": "摘录", "figure": "图表", "data": "数据", "idea": "想法"}
+HL_COLORS = {"yellow": "#ffd400", "red": "#ff6666", "green": "#5fb236", "blue": "#2ea8e5", "purple": "#a28ae5"}
+
+
+def rich_to_markdown(raw):
+    """卡片内容里的 =={color}高亮== / ++下划线++ 转成导出用的 <mark> / <u>。"""
+    out, hl, ul, last = [], None, False, 0
+
+    def push(t):
+        if not t:
+            return
+        if ul:
+            t = f"<u>{t}</u>"
+        if hl:
+            t = f'<mark style="background:{HL_COLORS[hl]}">{t}</mark>'
+        out.append(t)
+    for m in re.finditer(r"==\{(\w+)\}|==|\+\+", raw):
+        push(raw[last:m.start()])
+        last = m.end()
+        if m.group(1):
+            hl = m.group(1) if m.group(1) in HL_COLORS else "yellow"
+        elif m.group(0) == "==":
+            hl = None if hl else "yellow"
+        else:
+            ul = not ul
+    push(raw[last:])
+    return "".join(out)
 
 
 def export_image_names(cards):
@@ -518,7 +549,7 @@ def export_markdown(cards, mode="type", type_order=None, img_names=None):
         if c.get("image"):
             md.append(f"![{img_names.get(c['id'], '')}](images/{img_names.get(c['id'], c['image'])})\n")
         if c.get("content"):
-            md.append("\n".join("> " + line for line in c["content"].splitlines()) + f" {loc}\n")
+            md.append("\n".join("> " + line for line in rich_to_markdown(c["content"]).splitlines()) + f" {loc}\n")
         elif loc:
             md.append(loc + "\n")
         if c.get("note"):
@@ -607,6 +638,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.static("index.html", "text/html; charset=utf-8")
         if path == "/quick":
             return self.static("quick.html", "text/html; charset=utf-8")
+        if path.startswith("/static/") and re.fullmatch(r"/static/[\w.-]+\.(js|css)", path):
+            name = os.path.basename(path)
+            if os.path.exists(os.path.join(STATIC, name)):
+                return self.static(name, "text/javascript; charset=utf-8" if name.endswith(".js") else "text/css; charset=utf-8")
         if path == "/api/ping":
             return self.send(200, {"ok": True})
         if path.startswith("/images/"):
@@ -719,8 +754,17 @@ class Handler(BaseHTTPRequestHandler):
                 cid = int(m.group(1))
                 if "paper" in b:   # 新建或改挂来源
                     b["paper_id"] = upsert_paper(c, b.pop("paper")) if b["paper"] else None
-                allowed = ["type", "content", "note", "tags", "paper_id", "page", "image"]
+                allowed = ["type", "content", "note", "tags", "paper_id", "page", "image", "image_orig", "annot"]
                 upd = {k: (json.dumps(b[k], ensure_ascii=False) if k == "tags" else b[k]) for k in allowed if k in b}
+                old = c.execute("SELECT image, image_orig FROM cards WHERE id=?", (cid,)).fetchone()
+                if old and "image" in upd and old["image"] and old["image"] != upd["image"]:
+                    # 换了标注图：旧的渲染图（不是原图时）删掉
+                    keep = {upd.get("image_orig", old["image_orig"]), upd["image"]}
+                    if old["image"] not in keep:
+                        try:
+                            os.remove(os.path.join(IMAGES, old["image"]))
+                        except OSError:
+                            pass
                 if upd:
                     c.execute("UPDATE cards SET " + ",".join(f"{k}=?" for k in upd) + ", updated_at=? WHERE id=?",
                               (*upd.values(), time.time(), cid))
@@ -739,13 +783,14 @@ class Handler(BaseHTTPRequestHandler):
         m = re.fullmatch(r"/api/cards/(\d+)", path)
         if m:
             with _lock, db() as c:
-                r = c.execute("SELECT image FROM cards WHERE id=?", (m.group(1),)).fetchone()
+                r = c.execute("SELECT image, image_orig FROM cards WHERE id=?", (m.group(1),)).fetchone()
                 c.execute("DELETE FROM cards WHERE id=?", (m.group(1),))
-                if r and r["image"]:
-                    try:
-                        os.remove(os.path.join(IMAGES, r["image"]))
-                    except OSError:
-                        pass
+                for f in {r["image"], r["image_orig"]} if r else ():
+                    if f:
+                        try:
+                            os.remove(os.path.join(IMAGES, f))
+                        except OSError:
+                            pass
             return self.send(200, {"ok": True})
         self.send(404, {"error": "not found"})
 
