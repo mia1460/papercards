@@ -172,9 +172,8 @@ body.quad-mode .grid { flex: 1; min-height: 0; }
 #hlbar.on { display: flex; }
 #hlbar button { width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: var(--ink); font-size: 13px; cursor: pointer; padding: 0; }
 #hlbar button[data-color] { background: var(--c); border-radius: 50%; width: 20px; height: 20px; margin: 2px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
-#hlbar[data-mode=ul] button[data-color]:not(.none) { background: none; box-shadow: inset 0 -4px 0 var(--c), inset 0 0 0 1px var(--line); border-radius: 4px; }
 #hlbar button.none { background: #fff linear-gradient(135deg, transparent 45%, #e5484d 45%, #e5484d 55%, transparent 55%); }
-#hlbar .mode { display: flex; background: var(--chip); border-radius: 7px; padding: 2px; margin-right: 4px; }
+#hlbar .mode { display: flex; background: var(--chip); border-radius: 7px; padding: 2px; margin-left: 4px; }
 #hlbar .mode button { width: 28px; height: 24px; padding: 0; color: var(--muted); display: flex; align-items: center; justify-content: center; }
 #hlbar .mode button svg { display: block; }
 #hlbar .mode button.on { background: var(--panel); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
@@ -890,9 +889,9 @@ const ICON_HL = '<svg viewBox="0 0 16 16" width="16" height="16"><rect x="2" y="
 const ICON_UL = '<svg viewBox="0 0 16 16" width="16" height="16"><path d="M4.5 2.5v5a3.5 3.5 0 0 0 7 0v-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="3" y="12.6" width="10" height="1.8" rx=".9" fill="var(--ulc)"/></svg>';
 let lastColor = { hl: 'yellow', ul: 'red' };
 try { Object.assign(lastColor, JSON.parse(localStorage.getItem('papercards.hlColors') || '{}')); } catch (e) {}
-hlbar.innerHTML = `<span class="mode"><button data-mode="hl" title="高亮">${ICON_HL}</button><button data-mode="ul" title="下划线">${ICON_UL}</button></span>`
-  + Object.entries(HL).map(([k, v]) => `<button data-color="${k}" style="--c:${v}"></button>`).join('')
+hlbar.innerHTML = Object.entries(HL).map(([k, v]) => `<button data-color="${k}" style="--c:${v}"></button>`).join('')
   + '<button data-color="none" class="none" title="透明：去掉当前工具的格式"></button>'
+  + `<span class="mode"><button data-mode="hl" title="高亮">${ICON_HL}</button><button data-mode="ul" title="下划线">${ICON_UL}</button></span>`
   + '<span class="sep"></span><button data-clear="1" title="清除高亮和下划线">✕</button>';
 function syncHlbar() {
   hlbar.dataset.mode = hlMode;
