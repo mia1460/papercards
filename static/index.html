@@ -32,6 +32,18 @@ aside h2 .multi { float: right; border: 1px solid var(--line); background: none;
 .tagmode.on { display: flex; }
 .tagmode button { border: 0; background: none; color: var(--muted); padding: 1px 10px; border-radius: 6px; font-size: 11px; }
 .tagmode button.on { background: var(--panel); color: var(--ink); font-weight: 600; }
+.srctags { display: flex; flex-wrap: wrap; gap: 4px; margin: -2px 0 8px; }
+.srctags:empty { display: none; }
+.stag { display: inline-block; border: 1px solid var(--line); color: var(--muted); border-radius: 10px; padding: 0 7px; font-size: 11px; line-height: 17px; white-space: nowrap; }
+.srctags .stag { cursor: pointer; font-size: 12px; line-height: 19px; padding: 0 8px; }
+.srctags .stag:hover { border-color: var(--accent); color: var(--accent); }
+.srctags .stag.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.item .name small { display: block; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.item.on .name small { color: inherit; opacity: .75; }
+.card .src .stags { display: inline-flex; gap: 4px; flex-wrap: wrap; flex: none; align-self: flex-start; }
+.ptagsug { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ptagsug button { border: 1px dashed var(--line); background: none; color: var(--muted); border-radius: 10px; padding: 0 8px; font-size: 12px; line-height: 20px; cursor: pointer; }
+.ptagsug button:hover { border-color: var(--accent); color: var(--accent); }
 aside h2 .multi.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 22px 0 8px; font-weight: 600; }
 .search { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; outline: none; }
@@ -185,6 +197,7 @@ dialog img { max-width: 100%; max-height: 220px; display: block; margin: 0 auto;
     <h1>Paper<span>Cards</span></h1>
     <input class="search" id="q" placeholder="搜索内容、备注、标签、论文…">
     <h2>来源 <button class="clear" id="clearSel" title="清除来源筛选">全部</button><button class="multi" id="multiSel" title="开启后点击可同时选多个来源（单选模式下 ⌘ 点击也可多选）">多选</button></h2>
+    <div class="srctags" id="srcTags"></div>
     <div class="list" id="papers"></div>
     <h2>标签 <button class="clear" id="clearTag" title="清除标签筛选"></button><button class="multi" id="tagMultiBtn" title="开启后点击可同时选多个标签（单选模式下 ⌘ 点击也可多选）">多选</button></h2>
     <div class="tagmode" id="tagMode"><button data-m="any">任一</button><button data-m="all">全部</button></div>
@@ -241,12 +254,15 @@ dialog img { max-width: 100%; max-height: 220px; display: block; margin: 0 auto;
 </dialog>
 
 <dialog id="paperDlg">
-  <h3>编辑论文信息</h3>
+  <h3>编辑来源信息</h3>
   <label>标题</label><input id="pTitle">
   <label>作者（逗号分隔）</label><input id="pAuthors">
   <div class="row"><div><label>年份</label><input id="pYear"></div><div><label>会议/期刊</label><input id="pVenue"></div></div>
   <label>DOI</label><input id="pDoi">
   <label>链接</label><input id="pUrl">
+  <label>来源标签（逗号分隔，如会议、团队、机构）</label><input id="pTags" list="srcTagSuggest" placeholder="例如：NeurIPS, Google Brain">
+  <datalist id="srcTagSuggest"></datalist>
+  <div class="ptagsug" id="pTagSug"></div>
   <div class="foot"><button class="btn" id="pBib">复制 BibTeX</button><span style="flex:1"></span><button class="btn" id="pCancel">取消</button><button class="btn primary" id="pSave">保存</button></div>
 </dialog>
 
@@ -264,17 +280,18 @@ try {
 } catch (e) {}
 const orderedTypes = () => typeOrder.map(k => [k, TYPES[k]]);
 function saveTypeOrder() { try { localStorage.setItem('papercards.typeOrder', JSON.stringify(typeOrder)); } catch (e) {} }
-const S = { cards: [], papers: [], tags: [], type: '', sel: new Set(), tagSel: new Set(), tagMulti: false, tagAll: false, paneMode: {}, quadRatio: { col: 50, left: 50, right: 50 }, q: '', sort: 'new', group: '', multi: false, layout: 'masonry', size: 'm' };
+const S = { cards: [], papers: [], tags: [], type: '', sel: new Set(), srcTagSel: new Set(), tagSel: new Set(), tagMulti: false, tagAll: false, paneMode: {}, quadRatio: { col: 50, left: 50, right: 50 }, q: '', sort: 'new', group: '', multi: false, layout: 'masonry', size: 'm' };
 const LAYOUTS = { masonry: '瀑布流', grid: '网格', list: '列表', quad: '四分' };
 const SIZES = { s: '小', m: '中', l: '大' };
 try { Object.assign(S, JSON.parse(localStorage.getItem('papercards.view') || '{}')); } catch (e) {}
 for (const [k, v] of new URLSearchParams(location.search)) if (['sort', 'group', 'layout', 'size'].includes(k)) S[k] = v;
 if (S.sort === 'paper' || S.sort === 'type') { S.group = S.sort; S.sort = 'new'; }   // 兼容旧的保存值
-// URL 里还可以带：sources=1,2（来源 id）、tags=a,b（标签）、h=figure,data（这些四分区用左右翻页）、q=60,70,40（四分比例：左列宽%、左列上区高%、右列上区高%）
+// URL 里还可以带：sources=1,2（来源 id）、stags=a,b（来源标签）、tags=a,b（标签）、h=figure,data（这些四分区用左右翻页）、q=60,70,40（四分比例：左列宽%、左列上区高%、右列上区高%）
 {
   const u = new URLSearchParams(location.search);
   if (u.get('sources')) S.sel = new Set(u.get('sources').split(',').map(Number));
   if (u.get('tags')) S.tagSel = new Set(u.get('tags').split(','));
+  if (u.get('stags')) S.srcTagSel = new Set(u.get('stags').split(','));
   if (u.get('q')) { const [col, left, right] = u.get('q').split(',').map(Number); S.quadRatio = { col: col || 50, left: left || 50, right: right || 50 }; }
   if (u.get('h')) u.get('h').split(',').forEach(k => { S.paneMode = { ...S.paneMode, [k]: 'h' }; });
 }
@@ -313,11 +330,17 @@ async function load(force) {
   [S.cards, S.papers, S.tags] = r;
   render();
 }
+// 来源筛选：所选来源 + 所选来源标签（任一）
+function inSources(c) {
+  if (S.sel.size && !S.sel.has(c.paper_id || 0)) return false;
+  if (S.srcTagSel.size && !(c.paper && (c.paper.tags || []).some(t => S.srcTagSel.has(t)))) return false;
+  return true;
+}
 function filtered(ignoreType) {
   const q = S.q.toLowerCase();
   return S.cards.filter(c =>
     (ignoreType || !S.type || c.type === S.type) &&
-    (!S.sel.size || S.sel.has(c.paper_id || 0)) &&
+    inSources(c) &&
     (!S.tagSel.size || (S.tagAll ? [...S.tagSel].every(t => c.tags.includes(t)) : c.tags.some(t => S.tagSel.has(t)))) &&
     (!q || [c.content, c.note, c.tags.join(' '), c.paper && c.paper.title, c.paper && c.paper.authors.join(' ')].join(' ').toLowerCase().includes(q)));
 }
@@ -328,10 +351,23 @@ function render() {
   $('dType').innerHTML = orderedTypes().map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
 
   const unsorted = S.cards.filter(c => !c.paper_id).length;
-  $('papers').innerHTML = S.papers.filter(p => p.n).map(p =>
-    `<div class="item ${S.sel.has(p.id) ? 'on' : ''}" data-id="${p.id}" title="${esc(p.title)}">
-       <span class="name">${esc(p.title)}</span><button class="edit" data-edit="${p.id}" title="编辑论文信息">✎</button><span class="n">${p.n}</span></div>`).join('')
-    + (unsorted ? `<div class="item ${S.sel.has(0) ? 'on' : ''}" data-id="0"><span class="name" style="color:var(--accent)">未标注来源</span><span class="n">${unsorted}</span></div>` : '');
+  const srcTagCount = new Map();
+  S.papers.filter(p => p.n).forEach(p => (p.tags || []).forEach(t => srcTagCount.set(t, (srcTagCount.get(t) || 0) + 1)));
+  S.srcTagSel.forEach(t => { if (!srcTagCount.has(t)) srcTagCount.set(t, 0); });
+  $('srcTags').innerHTML = [...srcTagCount].sort((a, b) => b[1] - a[1]).map(([t, n]) =>
+    `<span class="stag ${S.srcTagSel.has(t) ? 'on' : ''}" data-st="${esc(t)}" title="只看带此标签的来源（⌘ 点击多选）">${esc(t)} ${n}</span>`).join('');
+  $('srcTags').querySelectorAll('.stag').forEach(el => el.onclick = e => {
+    const t = el.dataset.st;
+    if (S.multi || e.metaKey) S.srcTagSel.has(t) ? S.srcTagSel.delete(t) : S.srcTagSel.add(t);
+    else if (S.srcTagSel.size === 1 && S.srcTagSel.has(t)) S.srcTagSel.clear();
+    else S.srcTagSel = new Set([t]);
+    render();
+  });
+  const showPaper = p => p.n && (!S.srcTagSel.size || (p.tags || []).some(t => S.srcTagSel.has(t)) || S.sel.has(p.id));
+  $('papers').innerHTML = S.papers.filter(showPaper).map(p =>
+    `<div class="item ${S.sel.has(p.id) ? 'on' : ''}" data-id="${p.id}" title="${esc(p.title)}${(p.tags || []).length ? '\n' + esc(p.tags.join(' · ')) : ''}">
+       <span class="name">${esc(p.title)}${(p.tags || []).length ? `<small>${esc(p.tags.join(' · '))}</small>` : ''}</span><button class="edit" data-edit="${p.id}" title="编辑论文信息 / 来源标签">✎</button><span class="n">${p.n}</span></div>`).join('')
+    + (unsorted && !S.srcTagSel.size ? `<div class="item ${S.sel.has(0) ? 'on' : ''}" data-id="0"><span class="name" style="color:var(--accent)">未标注来源</span><span class="n">${unsorted}</span></div>` : '');
   $('multiSel').classList.toggle('on', S.multi);
   $('clearSel').classList.toggle('on', S.sel.size > 1);   // 只有多选（选了不止一个）时才显示
   $('clearSel').textContent = `已选 ${S.sel.size} · 清除`;
@@ -345,7 +381,7 @@ function render() {
   });
   // 标签列表只统计所选来源下的卡片；已选中的标签即使数量为 0 也保留，方便取消
   const counts = new Map();
-  S.cards.filter(c => !S.sel.size || S.sel.has(c.paper_id || 0))
+  S.cards.filter(inSources)
     .forEach(c => c.tags.forEach(t => counts.set(t, (counts.get(t) || 0) + 1)));
   S.tagSel.forEach(t => { if (!counts.has(t)) counts.set(t, 0); });
   const tagList = [...counts].sort((a, b) => b[1] - a[1]);
@@ -645,6 +681,7 @@ function cardHTML(c) {
   const link = srcLink(c);
   const src = c.paper
     ? `<a href="${esc(link || '#')}" title="${esc(c.paper.title)}">${esc(cite(c.paper))}${c.page ? ', p. ' + esc(c.page) : ''} · ${esc(c.paper.title)}</a>`
+      + ((c.paper.tags || []).length ? `<span class="stags">${c.paper.tags.map(t => `<span class="stag">${esc(t)}</span>`).join('')}</span>` : '')
     : `<span class="nosrc" data-act="edit">+ 添加来源</span>`;
   return `<div class="card" data-t="${c.type}" data-id="${c.id}">
     <div class="head"><span class="type">${TYPES[c.type] || c.type}</span><span title="创建时间">${fmtTime(c.created_at)}</span>
@@ -930,13 +967,28 @@ function editPaper(id) {
   const p = paperEditing = S.papers.find(p => p.id === id);
   $('pTitle').value = p.title || ''; $('pAuthors').value = (p.authors || []).join(', ');
   $('pYear').value = p.year || ''; $('pVenue').value = p.venue || ''; $('pDoi').value = p.doi || ''; $('pUrl').value = p.url || '';
+  $('pTags').value = (p.tags || []).join(', ');
+  // 建议：会议简称（取括号里的缩写或较短的会议名）+ 常用的已有来源标签
+  const all = new Map();
+  S.papers.forEach(x => (x.tags || []).forEach(t => all.set(t, (all.get(t) || 0) + 1)));
+  $('srcTagSuggest').innerHTML = [...all.keys()].map(t => `<option value="${esc(t)}">`).join('');
+  const venue = (p.venue || '').match(/\(([A-Za-z][\w-]{1,15})\)/)?.[1] || ((p.venue || '').length <= 20 ? p.venue : '');
+  const sug = [venue, ...[...all].sort((a, b) => b[1] - a[1]).map(([t]) => t)].filter(t => t && !(p.tags || []).includes(t));
+  $('pTagSug').innerHTML = [...new Set(sug)].slice(0, 8).map(t => `<button type="button" data-t="${esc(t)}">＋${esc(t)}</button>`).join('');
   $('paperDlg').showModal();
 }
 $('pCancel').onclick = () => $('paperDlg').close();
+$('pTagSug').onclick = e => {
+  const t = e.target.dataset.t; if (!t) return;
+  const cur = $('pTags').value.split(/[,，]/).map(x => x.trim()).filter(Boolean);
+  if (!cur.includes(t)) cur.push(t);
+  $('pTags').value = cur.join(', '); e.target.remove();
+};
 $('pSave').onclick = async () => {
   await api('/api/papers/' + paperEditing.id, { method: 'PUT', body: JSON.stringify({
     title: $('pTitle').value.trim(), authors: $('pAuthors').value.split(/[,，]/).map(s => s.trim()).filter(Boolean),
-    year: $('pYear').value.trim(), venue: $('pVenue').value.trim(), doi: $('pDoi').value.trim(), url: $('pUrl').value.trim() }) });
+    year: $('pYear').value.trim(), venue: $('pVenue').value.trim(), doi: $('pDoi').value.trim(), url: $('pUrl').value.trim(),
+    tags: [...new Set($('pTags').value.split(/[,，]/).map(x => x.trim()).filter(Boolean))] }) });
   $('paperDlg').close(); load();
 };
 $('pBib').onclick = async () => {

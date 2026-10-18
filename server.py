@@ -68,6 +68,9 @@ def init_db():
             created_at REAL, updated_at REAL
         );
         """)
+        # 老数据库升级：来源标签（会议、团队等）
+        if "tags" not in [r[1] for r in c.execute("PRAGMA table_info(papers)")]:
+            c.execute("ALTER TABLE papers ADD COLUMN tags TEXT")
 
 
 def paper_dict(r):
@@ -75,6 +78,7 @@ def paper_dict(r):
         return None
     d = dict(r)
     d["authors"] = json.loads(d["authors"] or "[]")
+    d["tags"] = json.loads(d.get("tags") or "[]")
     return d
 
 
@@ -529,7 +533,8 @@ def export_markdown(cards, mode="type", type_order=None, img_names=None):
             p = cs[0]["paper"]
             if p:
                 out.append(f"## {p['title']}\n\n*{', '.join(p['authors'][:6])}{' 等' if len(p['authors']) > 6 else ''}* · {p.get('venue') or ''} {p.get('year') or ''}"
-                           + (f" · [链接]({p['url']})" if p.get("url") else "") + "\n")
+                           + (f" · [链接]({p['url']})" if p.get("url") else "")
+                           + (f"\n\n来源标签：{' · '.join(p['tags'])}" if p.get("tags") else "") + "\n")
             else:
                 out.append("## 未标注来源\n")
             for c in cs:
@@ -559,7 +564,7 @@ def export_markdown(cards, mode="type", type_order=None, img_names=None):
         out.append("## 来源\n")
         for p in papers:
             out.append(f"- {p['title']}" + (f" — {cite_short(p)}" if cite_short(p) else "") + (f" · {p['venue']}" if p.get("venue") else "")
-                       + (f" · <{p['url']}>" if p.get("url") else ""))
+                       + (f" · <{p['url']}>" if p.get("url") else "") + (f"（{' · '.join(p['tags'])}）" if p.get("tags") else ""))
         out.append("")
     if papers:
         out.append("## BibTeX\n\n```bibtex\n" + "\n\n".join(bibtex(p) for p in papers) + "\n```\n")
@@ -722,8 +727,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, card_dict(c, c.execute("SELECT * FROM cards WHERE id=?", (cid,)).fetchone()))
             m = re.fullmatch(r"/api/papers/(\d+)", path)
             if m:
-                allowed = ["title", "authors", "year", "venue", "doi", "url"]
-                upd = {k: (json.dumps(b[k], ensure_ascii=False) if k == "authors" else b[k]) for k in allowed if k in b}
+                allowed = ["title", "authors", "year", "venue", "doi", "url", "tags"]
+                upd = {k: (json.dumps(b[k], ensure_ascii=False) if k in ("authors", "tags") else b[k]) for k in allowed if k in b}
                 if upd:
                     c.execute("UPDATE papers SET " + ",".join(f"{k}=?" for k in upd) + " WHERE id=?", (*upd.values(), m.group(1)))
                 return self.send(200, paper_dict(c.execute("SELECT * FROM papers WHERE id=?", (m.group(1),)).fetchone()))

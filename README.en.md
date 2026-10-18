@@ -60,6 +60,7 @@ The cursor starts in the tag box: Enter adds a tag, Enter on an empty box jumps 
 
 **Card wall** (`http://127.0.0.1:8787`)
 
+- **Source tags**: label sources with their venue, team or institution (edit via ✎ on a source; the venue can be added in one click); filter by source tag at the top of the sidebar; shown as outlined pills on each card's source line and included in exports
 - Filter by source, tag and type; full-text search. Sources and tags are single-select by default, with a multi-select toggle (or ⌘-click); multiple tags can match "any" or "all"; the tag list only counts cards from the selected sources
 - Group (by source / type) × sort (newest / oldest); masonry, grid, list and quad layouts; adjustable card size and a draggable sidebar
 - **Quad layout**: ideas, quotes, figures and data each get their own independently scrolling pane; drag the dividers to resize (double-click to reset), switch each pane between vertical scrolling and horizontal paging, reset in one click
@@ -68,7 +69,7 @@ The cursor starts in the tag box: Enter adds a tag, Enter on an empty box jumps 
 - Add / remove tags right on a card (with autocomplete); rename, merge or delete tags from the sidebar; double-click a card's text or click its note to edit inline (a single click expands long text)
 - Paste an image or text with `⌘V` to create a card; timestamps down to the second
 - Export to Markdown (a zip with images and BibTeX): sections and order follow the current view (by type / by source / flat); images are named by type and sequence, e.g. `图表-1.png` (figure-1), numbered by creation time within each type
-- Save a view as a bookmark with URL parameters, e.g. `?layout=quad&q=60,50,50&tags=results` (parameters: `layout` `group` `sort` `size` `sources` `tags` `h` `q`)
+- Save a view as a bookmark with URL parameters, e.g. `?layout=quad&q=60,50,50&tags=results` (parameters: `layout` `group` `sort` `size` `sources` `stags` `tags` `h` `q`)
 
 ## Installation
 
