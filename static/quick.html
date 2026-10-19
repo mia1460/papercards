@@ -154,9 +154,15 @@ function addTag() {
   return !!v;
 }
 
+// 输入法判断：中文输入法里按回车 / Esc 是给输入法用的（确认字母、取消拼音），不能当成保存 / 关闭。
+// Safari 内核（录入面板所在的 Hammerspoon 窗口）会先结束输入再派发按键，isComposing 已是 false，
+// 所以还要看 keyCode 229，以及输入法是否刚刚结束。
+let imeEndAt = 0;
+document.addEventListener('compositionend', () => { imeEndAt = performance.now(); }, true);
+const isIME = e => e.isComposing || e.keyCode === 229 || performance.now() - imeEndAt < 120;
 $('srcBtn').onclick = () => { $('srcEdit').classList.toggle('open'); $('lookup').focus(); };
 $('lookup').addEventListener('keydown', async e => {
-  if (e.key !== 'Enter') return;
+  if (e.key !== 'Enter' || isIME(e)) return;
   e.preventDefault(); e.stopPropagation();
   const q = $('lookup').value.trim();
   if (!q) return;
@@ -172,23 +178,23 @@ $('pick').addEventListener('change', () => {
   if (p) { card.paper = p; card._pickedId = p.id; newPaper = null; renderSource(); }
 });
 $('pick').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && $('pick').value && !papers.find(p => p.title === $('pick').value)) {
+  if (e.key === 'Enter' && !isIME(e) && $('pick').value && !papers.find(p => p.title === $('pick').value)) {
     e.preventDefault(); e.stopPropagation();
     newPaper = { title: $('pick').value.trim() }; card.paper = newPaper; renderSource(); $('tagIn').focus();
   }
 });
 $('tagIn').addEventListener('keydown', e => {
-  if ((e.key === 'Enter' || e.key === ',' || e.key === '，') && !e.isComposing && !e.metaKey) {
+  if ((e.key === 'Enter' || e.key === ',' || e.key === '，') && !isIME(e) && !e.metaKey) {
     e.preventDefault(); e.stopPropagation();
     if (!addTag() && e.key === 'Enter') $('note').focus();   // 空回车：跳到备注，不保存
   } else if (e.key === 'Backspace' && !$('tagIn').value && tags.length) { tags.pop(); renderTags(); }
 });
 $('note').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); e.stopPropagation(); save(); }
+  if (e.key === 'Enter' && !e.shiftKey && !isIME(e)) { e.preventDefault(); e.stopPropagation(); save(); }
 });
 document.addEventListener('keydown', e => {
   if (e.metaKey && (e.key === 'Backspace' || e.key === 'Delete')) { e.preventDefault(); e.stopPropagation(); discard(); }
-  else if (e.key === 'Escape') { e.preventDefault(); save(); }
+  else if (e.key === 'Escape' && !isIME(e)) { e.preventDefault(); save(); }
   else if (e.metaKey && e.key === 'Enter') { e.preventDefault(); save(); }
   else if (e.metaKey && /^[1-4]$/.test(e.key)) { e.preventDefault(); card.type = TYPES[+e.key - 1][0]; renderTypes(); }
 });

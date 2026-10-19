@@ -976,6 +976,12 @@ document.addEventListener('keydown', async e => {
   toast(`${e.shiftKey ? '已重做' : '已撤销'}：${op.label}`);
 });
 
+// 输入法判断：中文输入法里按回车 / Esc 是给输入法用的（确认字母、取消拼音），不能当成保存 / 关闭。
+// Safari 内核（录入面板所在的 Hammerspoon 窗口）会先结束输入再派发按键，isComposing 已是 false，
+// 所以还要看 keyCode 229，以及输入法是否刚刚结束。
+let imeEndAt = 0;
+document.addEventListener('compositionend', () => { imeEndAt = performance.now(); }, true);
+const isIME = e => e.isComposing || e.keyCode === 229 || performance.now() - imeEndAt < 120;
 // 双击内容直接编辑（单击长内容仍是展开全文）：回车换行，⌘回车或失焦保存，Esc 取消
 $('grid').addEventListener('dblclick', e => {
   const el = e.target.closest('.card .content');
@@ -1003,6 +1009,7 @@ function editContent(el, c) {
     render();
   };
   ta.addEventListener('keydown', e => {
+    if (isIME(e)) return;
     if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); finish(true); }
     if (e.key === 'Escape') { e.preventDefault(); finish(false); }
   });
@@ -1028,7 +1035,8 @@ function editNote(el, c) {
     render();
   };
   ta.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); finish(true); }
+    if (isIME(e)) return;
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finish(true); }
     if (e.key === 'Escape') { e.preventDefault(); finish(false); }
   });
   ta.addEventListener('blur', () => finish(true));
@@ -1041,7 +1049,8 @@ function addTagInline(btn, c) {
   let done = false;
   const finish = () => { if (!done) { done = true; render(); } };
   inp.addEventListener('keydown', async e => {
-    if (e.key === 'Enter' && !e.isComposing) {
+    if (isIME(e)) return;
+    if (e.key === 'Enter') {
       e.preventDefault();
       const v = inp.value.trim().replace(/^#/, '');
       if (!v) return finish();

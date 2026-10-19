@@ -7,6 +7,8 @@
   ];
   const COLORS = ['#ff3b30', '#ffcc00', '#34c759', '#0a84ff', '#1c1c1e', '#ffffff'];
   const SIZES = [['s', 1], ['m', 2], ['l', 3.5]];
+  let imeEndAt = 0;
+  document.addEventListener('compositionend', () => { imeEndAt = performance.now(); }, true);
 
   const css = `
   .an-dlg { border: 0; padding: 0; background: var(--panel, #fff); color: var(--ink, #222); border-radius: 12px; width: min(1200px, 96vw); max-width: 96vw; max-height: 96vh; }
@@ -159,7 +161,8 @@
       };
       inp.addEventListener('keydown', ev => {
         ev.stopPropagation();
-        if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); commit(true); }
+        if (ev.isComposing || ev.keyCode === 229 || performance.now() - imeEndAt < 120) return;   // 输入法的回车 / Esc
+        if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); commit(true); }
         if (ev.key === 'Escape') { ev.preventDefault(); commit(false); }
       });
       inp.addEventListener('input', () => { inp.style.height = 'auto'; inp.style.height = inp.scrollHeight + 'px'; });
