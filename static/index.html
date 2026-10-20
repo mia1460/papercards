@@ -891,7 +891,7 @@ let lastColor = { hl: 'yellow', ul: 'red' };
 try { Object.assign(lastColor, JSON.parse(localStorage.getItem('papercards.hlColors') || '{}')); } catch (e) {}
 hlbar.innerHTML = Object.entries(HL).map(([k, v]) => `<button data-color="${k}" style="--c:${v}"></button>`).join('')
   + '<button data-color="none" class="none" title="透明：去掉当前工具的格式"></button>'
-  + `<span class="mode"><button data-mode="hl" title="高亮">${ICON_HL}</button><button data-mode="ul" title="下划线">${ICON_UL}</button></span>`
+  + `<span class="mode"><button data-mode="hl" title="高亮（用上次的颜色）">${ICON_HL}</button><button data-mode="ul" title="下划线（用上次的颜色）">${ICON_UL}</button></span>`
   + '<span class="sep"></span><button data-clear="1" title="清除高亮和下划线">✕</button>';
 function syncHlbar() {
   hlbar.dataset.mode = hlMode;
@@ -933,12 +933,11 @@ hlbar.addEventListener('click', async e => {
   if (!b || !hlTarget) return;
   const c = S.cards.find(x => x.id === +hlTarget.el.closest('.card').dataset.id);
   if (!c) return;
-  if (b.dataset.mode) {   // 切换工具：不关闭工具条，保留选区
+  if (b.dataset.mode) {   // 点高亮 / 下划线图标：切到该工具，并直接用上次的颜色应用（同色再点 = 取消）
     hlMode = b.dataset.mode; syncHlbar();
     try { localStorage.setItem('papercards.hlMode', hlMode); } catch (e) {}
-    return;
   }
-  const col = b.dataset.color === 'none' ? null : b.dataset.color;
+  const col = b.dataset.mode ? lastColor[hlMode] : b.dataset.color === 'none' ? null : b.dataset.color;
   if (col) {   // 记住最近用的颜色，用在工具图标上
     lastColor[hlMode] = col; syncHlbar();
     try { localStorage.setItem('papercards.hlColors', JSON.stringify(lastColor)); } catch (e) {}
