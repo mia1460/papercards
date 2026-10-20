@@ -60,7 +60,7 @@ The cursor starts in the tag box: Enter adds a tag, Enter on an empty box jumps 
 
 **Card wall** (`http://127.0.0.1:8787`)
 
-- **Highlights / underline** (like Zotero): select text in a card to get a toolbar: click one of 5 colors for the current tool, or click the highlight / underline icon to reuse the last color; the transparent swatch removes the current format, ✕ clears both, and clicking the same color again also removes it; `⌘Z` / `⌘⇧Z` undo / redo (content edits too). Exported as colored `<mark>` / `<u>`
+- **Highlights / underline** (like Zotero): select text in a card to get a toolbar: click one of 5 colors for the current tool, click the other highlight / underline icon to switch tools, or the current tool's icon again to reuse its last color; the transparent swatch removes the current format, ✕ clears both, and clicking the same color again also removes it; `⌘Z` / `⌘⇧Z` undo / redo (content edits too). Exported as colored `<mark>` / `<u>`
 - **Image annotation** (like Snipaste): "标注" on an image card opens an editor with rectangle, ellipse, arrow, pen, marker, text and mosaic tools, 6 colors, 3 sizes and undo / redo; the original image is kept, so annotations can be edited later or cleared
 - **Source tags**: label sources with their venue, team or institution (edit via ✎ on a source; the venue can be added in one click); filter by source tag at the top of the sidebar; shown as outlined pills on each card's source line and included in exports
 - Filter by source, tag and type; full-text search. Sources and tags are single-select by default, with a multi-select toggle (or ⌘-click); multiple tags can match "any" or "all"; the tag list only counts cards from the selected sources
