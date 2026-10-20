@@ -13,6 +13,9 @@ local SERVER = "http://127.0.0.1:8787"
 local MODS = { "ctrl", "alt", "cmd" }
 
 local serverTask, panel
+local panelUC          -- 当前面板的消息回调对象（保留引用，稳妥起见）
+local captureBusyAt    -- 正在收集（还没弹出面板）的开始时间，用来忽略连按
+local postCount = 0
 local panelClosedHook   -- 面板关闭后调用一次（自动截图用它恢复监视）
 
 local function firePanelClosed()
@@ -162,33 +165,43 @@ end
 
 local function showPanel(id, prevWin)
   closePanel()
+  local wv
   local uc = hs.webview.usercontent.new("papercards")
   uc:setCallback(function(msg)
-    if msg.body == "close" then closePanel(prevWin) end
+    if msg.body ~= "close" then return end
+    if panel == wv then closePanel(prevWin)          -- 当前面板：正常关闭并回到阅读窗口
+    elseif wv then wv:delete() end                  -- 已被新面板取代的旧面板：只关掉它自己
   end)
+  panelUC = uc
   local screen = (prevWin and prevWin:screen()) or hs.mouse.getCurrentScreen()
   local f = screen:frame()
   local w, h = 480, 420
   local rect = { x = f.x + (f.w - w) / 2, y = f.y + f.h * 0.18, w = w, h = h }
-  panel = hs.webview.new(rect, { developerExtrasEnabled = true }, uc)
+  wv = hs.webview.new(rect, { developerExtrasEnabled = true }, uc)
     :windowTitle("PaperCards · 新卡片")
     :windowStyle({ "titled", "closable" })
     :allowTextEntry(true)
     :closeOnEscape(false)
     :deleteOnClose(true)
     :level(hs.drawing.windowLevels.floating)
-    :windowCallback(function(action) if action == "closing" then panel = nil; firePanelClosed() end end)
+    -- 「closing」回调在 delete() 之后才异步触发：只能清理自己，不能清掉已经换上的新面板
+    :windowCallback(function(action)
+      if action == "closing" and panel == wv then panel = nil; firePanelClosed() end
+    end)
     :url(SERVER .. "/quick?id=" .. id)
     :show()
+  panel = wv
   panel:bringToFront(true)
   hs.timer.doAfter(0.05, function()
-    if panel and panel:hswindow() then panel:hswindow():focus() end
+    if panel == wv and wv:hswindow() then wv:hswindow():focus() end
   end)
 end
 
 local function post(payload, prevWin)
+  postCount = postCount + 1
   hs.http.asyncPost(SERVER .. "/api/capture", hs.json.encode(payload), { ["Content-Type"] = "application/json" },
     function(code, body)
+      captureBusyAt = nil
       if code ~= 200 then
         print("PaperCards capture failed: " .. tostring(code) .. " " .. tostring(body))
         hs.alert.show("PaperCards 保存失败：" .. tostring(code))
@@ -254,7 +267,7 @@ end
 
 local function snip(args, timeout, ctx)
   snipToFile(args, timeout, function(path)
-    if not path then return end
+    if not path then captureBusyAt = nil return end
     local p = payloadFrom(ctx)
     p.kind, p.image_path = "image", path
     post(p, ctx.win)
@@ -522,12 +535,32 @@ local function guarded(name, fn)
   end
 end
 
-hs.hotkey.bind(MODS, "c", guarded("C", M.captureText))
+-- 收集类快捷键：按下立即提示；收集完成（面板弹出）前重复按会被忽略，避免建出多张相同的卡片
+local function guardedCapture(name, fn, async)
+  local run = guarded(name, fn)
+  return function()
+    local now = hs.timer.secondsSinceEpoch()
+    if captureBusyAt and now - captureBusyAt < 6 then
+      hs.alert.show("正在收集，请稍候", 0.8)
+      return
+    end
+    captureBusyAt = now
+    hs.alert.show("收集中…", 0.6)
+    local before = postCount
+    run()
+    -- 同步流程没有发出保存（没选中文字、剪贴板为空、出错）→ 立刻解除；异步截图由回调解除
+    if not async and postCount == before then captureBusyAt = nil end
+  end
+end
+
+hs.hotkey.bind(MODS, "c", guardedCapture("C", M.captureText))
 hs.hotkey.bind(MODS, "s", guarded("S", M.captureScreenshot))
-hs.hotkey.bind(MODS, "r", guarded("R", M.captureLastRegion))
-hs.hotkey.bind(MODS, "v", guarded("V", M.capturePasteboard))
+hs.hotkey.bind(MODS, "r", guardedCapture("R", M.captureLastRegion, true))
+hs.hotkey.bind(MODS, "v", guardedCapture("V", M.capturePasteboard))
 hs.hotkey.bind(MODS, "a", guarded("A", M.toggleWatch))
 hs.hotkey.bind(MODS, "p", guarded("P", M.openWall))
+M._showPanel = showPanel   -- 供调试 / 测试
+M._panel = function() return panel end
 hs.timer.doAfter(1, function() if not serverUp() then ensureServer() end end)
 
 return M
