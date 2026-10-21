@@ -44,6 +44,7 @@ input:focus, textarea.note:focus { border-color: var(--accent); }
 .sug { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: 5; background: var(--panel);
        border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.12); padding: 3px 0; }
 .sug.open { display: block; }
+.sug.up { top: auto; bottom: calc(100% + 2px); }
 .sug div { padding: 3px 10px; cursor: pointer; display: flex; justify-content: space-between; }
 .sug div span { color: var(--muted); font-size: 11px; }
 .sug div.on { background: var(--accent-soft); color: var(--accent); }
@@ -157,26 +158,31 @@ async function save() {
   closePanel();
 }
 function addTag(v = $('tagIn').value) {
-  v = v.trim().replace(/^#/, '');
+  v = v.trim().replace(/^#/, ''); sugAll = false;
   if (v && !tags.includes(v)) tags.push(v);
   $('tagIn').value = ''; renderTags(); renderSug();
   return !!v;
 }
 // 标签补全：不用原生 datalist（WKWebView 里回车选候选项时拿不到选中的值），自己画一个候选列表
-let sugs = [], sugAt = -1;
+let sugs = [], sugAt = -1, sugAll = false;   // sugAll：框是空的也列出常用标签（按 ↓ 或点输入框时）
 function renderSug() {
   const q = $('tagIn').value.trim().replace(/^#/, '').toLowerCase();
-  sugs = q ? allTags.filter(([t]) => !tags.includes(t) && t.toLowerCase().includes(q)).slice(0, 6) : [];
+  sugs = q || sugAll ? allTags.filter(([t]) => !tags.includes(t) && t.toLowerCase().includes(q)).slice(0, 6) : [];
   if (sugAt >= sugs.length) sugAt = -1;
-  $('sug').innerHTML = sugs.map(([t, n], i) => `<div class="${i === sugAt ? 'on' : ''}" data-i="${i}">${esc(t)}<span>${n}</span></div>`).join('');
-  $('sug').classList.toggle('open', sugs.length > 0 && document.activeElement === $('tagIn'));
+  const el = $('sug');
+  el.innerHTML = sugs.map(([t, n], i) => `<div class="${i === sugAt ? 'on' : ''}" data-i="${i}">${esc(t)}<span>${n}</span></div>`).join('');
+  el.classList.toggle('open', sugs.length > 0 && document.activeElement === $('tagIn'));
+  // 面板窗口很矮，标签框靠下：下方放不下就往上展开，免得列表被窗口裁掉
+  el.classList.remove('up');
+  if (el.classList.contains('open') && el.getBoundingClientRect().bottom > innerHeight) el.classList.add('up');
 }
 $('sug').addEventListener('mousedown', e => {
   const d = e.target.closest('[data-i]');
   if (d) { e.preventDefault(); sugAt = -1; addTag(sugs[+d.dataset.i][0]); }
 });
-$('tagIn').addEventListener('input', () => { sugAt = -1; renderSug(); });
-$('tagIn').addEventListener('blur', () => $('sug').classList.remove('open'));
+$('tagIn').addEventListener('input', () => { sugAt = -1; if (!$('tagIn').value) sugAll = false; renderSug(); });
+$('tagIn').addEventListener('mousedown', () => { sugAll = true; setTimeout(renderSug); });
+$('tagIn').addEventListener('blur', () => { sugAll = false; $('sug').classList.remove('open'); });
 $('tagIn').addEventListener('focus', renderSug);
 
 // 输入法判断：中文输入法里按回车 / Esc 是给输入法用的（确认字母、取消拼音），不能当成保存 / 关闭。
@@ -211,6 +217,7 @@ $('pick').addEventListener('keydown', e => {
 });
 $('tagIn').addEventListener('keydown', e => {
   if (isIME(e) || e.metaKey) return;
+  if (e.key === 'ArrowDown' && !$('sug').classList.contains('open')) { sugAll = true; renderSug(); }
   const open = $('sug').classList.contains('open');
   if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
     e.preventDefault();
@@ -220,7 +227,7 @@ $('tagIn').addEventListener('keydown', e => {
   } else if (open && e.key === 'Tab' && !e.shiftKey) {   // Tab：用第一个（或选中的）候选
     e.preventDefault(); const t = sugs[Math.max(sugAt, 0)][0]; sugAt = -1; addTag(t);
   } else if (open && e.key === 'Escape') {               // Esc 先收起候选列表
-    e.preventDefault(); e.stopPropagation(); sugAt = -1; $('sug').classList.remove('open');
+    e.preventDefault(); e.stopPropagation(); sugAt = -1; sugAll = false; $('sug').classList.remove('open');
   } else if (e.key === 'Enter' || e.key === ',' || e.key === '，') {
     e.preventDefault(); e.stopPropagation();
     const picked = sugAt >= 0 && e.key === 'Enter' ? sugs[sugAt][0] : undefined;
