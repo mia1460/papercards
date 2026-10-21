@@ -40,6 +40,13 @@ input:focus, textarea.note:focus { border-color: var(--accent); }
         background: var(--panel); border-radius: 6px; padding: 4px 6px; }
 .tags:focus-within { border-color: var(--accent); }
 .tags input { border: 0; padding: 2px; flex: 1; min-width: 80px; background: transparent; }
+.tagbox { position: relative; }
+.sug { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: 5; background: var(--panel);
+       border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.12); padding: 3px 0; }
+.sug.open { display: block; }
+.sug div { padding: 3px 10px; cursor: pointer; display: flex; justify-content: space-between; }
+.sug div span { color: var(--muted); font-size: 11px; }
+.sug div.on { background: var(--accent-soft); color: var(--accent); }
 .chip { background: var(--chip); border-radius: 10px; padding: 1px 8px; font-size: 12px; cursor: pointer; }
 .chip:hover { text-decoration: line-through; }
 textarea.note { resize: none; height: 52px; }
@@ -64,8 +71,10 @@ textarea.note { resize: none; height: 52px; }
   <input id="pick" list="papers" placeholder="或选择已有论文…">
   <datalist id="papers"></datalist>
 </div>
-<div class="tags" id="tags"><input id="tagIn" list="tagList" placeholder="标签：回车添加，空回车跳到备注"></div>
-<datalist id="tagList"></datalist>
+<div class="tagbox">
+  <div class="tags" id="tags"><input id="tagIn" autocomplete="off" placeholder="标签：回车添加，空回车跳到备注"></div>
+  <div class="sug" id="sug"></div>
+</div>
 <textarea class="note" id="note" placeholder="备注（回车保存，⇧回车换行）"></textarea>
 <div class="actions">
   <button class="ghost" id="del">丢弃 ⌘⌫</button>
@@ -76,7 +85,7 @@ textarea.note { resize: none; height: 52px; }
 <script>
 const id = new URLSearchParams(location.search).get('id');
 const TYPES = [['quote', '摘录'], ['figure', '图表'], ['data', '数据'], ['idea', '想法']];
-let card, tags = [], papers = [];
+let card, tags = [], papers = [], allTags = [];
 const $ = s => document.getElementById(s);
 const api = (p, o = {}) => fetch(p, { headers: { 'Content-Type': 'application/json' }, ...o }).then(r => r.json());
 
@@ -125,7 +134,7 @@ async function load() {
   renderTypes(); renderSource(); renderTags();
   $('tagIn').focus();
   if (card.resolving) poll();
-  api('/api/tags').then(ts => $('tagList').innerHTML = ts.map(([t]) => `<option value="${esc(t)}">`).join(''));
+  api('/api/tags').then(ts => { allTags = ts; renderSug(); });
   papers = await api('/api/papers');
   $('papers').innerHTML = papers.map(p => `<option value="${esc(p.title)}">${esc(cite(p))}</option>`).join('');
 }
@@ -147,19 +156,36 @@ async function save() {
   await api('/api/cards/' + id, { method: 'PUT', body: JSON.stringify(body) });
   closePanel();
 }
-function addTag() {
-  const v = $('tagIn').value.trim().replace(/^#/, '');
+function addTag(v = $('tagIn').value) {
+  v = v.trim().replace(/^#/, '');
   if (v && !tags.includes(v)) tags.push(v);
-  $('tagIn').value = ''; renderTags();
+  $('tagIn').value = ''; renderTags(); renderSug();
   return !!v;
 }
+// 标签补全：不用原生 datalist（WKWebView 里回车选候选项时拿不到选中的值），自己画一个候选列表
+let sugs = [], sugAt = -1;
+function renderSug() {
+  const q = $('tagIn').value.trim().replace(/^#/, '').toLowerCase();
+  sugs = q ? allTags.filter(([t]) => !tags.includes(t) && t.toLowerCase().includes(q)).slice(0, 6) : [];
+  if (sugAt >= sugs.length) sugAt = -1;
+  $('sug').innerHTML = sugs.map(([t, n], i) => `<div class="${i === sugAt ? 'on' : ''}" data-i="${i}">${esc(t)}<span>${n}</span></div>`).join('');
+  $('sug').classList.toggle('open', sugs.length > 0 && document.activeElement === $('tagIn'));
+}
+$('sug').addEventListener('mousedown', e => {
+  const d = e.target.closest('[data-i]');
+  if (d) { e.preventDefault(); sugAt = -1; addTag(sugs[+d.dataset.i][0]); }
+});
+$('tagIn').addEventListener('input', () => { sugAt = -1; renderSug(); });
+$('tagIn').addEventListener('blur', () => $('sug').classList.remove('open'));
+$('tagIn').addEventListener('focus', renderSug);
 
 // 输入法判断：中文输入法里按回车 / Esc 是给输入法用的（确认字母、取消拼音），不能当成保存 / 关闭。
 // Safari 内核（录入面板所在的 Hammerspoon 窗口）会先结束输入再派发按键，isComposing 已是 false，
 // 所以还要看 keyCode 229，以及输入法是否刚刚结束。
 let imeEndAt = 0;
 document.addEventListener('compositionend', () => { imeEndAt = performance.now(); }, true);
-const isIME = e => e.isComposing || e.keyCode === 229 || performance.now() - imeEndAt < 120;
+// 时间窗口只要盖住「选字的那一下按键」即可（实测选字后约 20ms 派发），太长会把选完字紧接着按的回车吞掉
+const isIME = e => e.isComposing || e.keyCode === 229 || performance.now() - imeEndAt < 50;
 $('srcBtn').onclick = () => { $('srcEdit').classList.toggle('open'); $('lookup').focus(); };
 $('lookup').addEventListener('keydown', async e => {
   if (e.key !== 'Enter' || isIME(e)) return;
@@ -184,9 +210,22 @@ $('pick').addEventListener('keydown', e => {
   }
 });
 $('tagIn').addEventListener('keydown', e => {
-  if ((e.key === 'Enter' || e.key === ',' || e.key === '，') && !isIME(e) && !e.metaKey) {
+  if (isIME(e) || e.metaKey) return;
+  const open = $('sug').classList.contains('open');
+  if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+    e.preventDefault();
+    const n = sugs.length;
+    sugAt = e.key === 'ArrowDown' ? (sugAt + 1) % n : (sugAt <= 0 ? n - 1 : sugAt - 1);
+    renderSug();
+  } else if (open && e.key === 'Tab' && !e.shiftKey) {   // Tab：用第一个（或选中的）候选
+    e.preventDefault(); const t = sugs[Math.max(sugAt, 0)][0]; sugAt = -1; addTag(t);
+  } else if (open && e.key === 'Escape') {               // Esc 先收起候选列表
+    e.preventDefault(); e.stopPropagation(); sugAt = -1; $('sug').classList.remove('open');
+  } else if (e.key === 'Enter' || e.key === ',' || e.key === '，') {
     e.preventDefault(); e.stopPropagation();
-    if (!addTag() && e.key === 'Enter') $('note').focus();   // 空回车：跳到备注，不保存
+    const picked = sugAt >= 0 && e.key === 'Enter' ? sugs[sugAt][0] : undefined;
+    sugAt = -1;
+    if (!addTag(picked) && e.key === 'Enter') $('note').focus();   // 空回车：跳到备注，不保存
   } else if (e.key === 'Backspace' && !$('tagIn').value && tags.length) { tags.pop(); renderTags(); }
 });
 $('note').addEventListener('keydown', e => {
@@ -198,6 +237,8 @@ document.addEventListener('keydown', e => {
   else if (e.metaKey && e.key === 'Enter') { e.preventDefault(); save(); }
   else if (e.metaKey && /^[1-4]$/.test(e.key)) { e.preventDefault(); card.type = TYPES[+e.key - 1][0]; renderTypes(); }
 });
+// 面板窗口刚弹出时可能还没成为活动窗口，load() 里的 focus 没生效；窗口激活后补一次
+window.addEventListener('focus', () => { if (document.activeElement === document.body) $('tagIn').focus(); });
 $('save').onclick = save;
 async function discard() { await api('/api/cards/' + id, { method: 'DELETE' }); closePanel(); }
 $('del').onclick = discard;
