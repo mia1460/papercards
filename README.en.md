@@ -50,7 +50,7 @@ Everything stays on your machine (SQLite + an image folder). No cloud services.
 
 **Capture panel**
 
-The cursor starts in the tag box: existing tags are suggested as you type (or press `↓` / click on an empty box for the most used ones; `↑` `↓` to pick, `Tab` takes the first); Enter adds a tag, Enter on an empty box jumps to the note; Enter in the note saves (⇧Enter for a new line). `⌘⏎` saves from anywhere, Esc saves and closes, `⌘1–4` switches the type (quote / figure / data / idea), `⌘⌫` discards an accidental capture.
+The cursor starts in the tag box: all existing tags are listed when the panel opens and filtered as you type (`↑` `↓` to pick, `Tab` takes the first); Enter adds a tag, Enter on an empty box jumps to the note; Enter in the note saves (⇧Enter for a new line). `⌘⏎` saves from anywhere, Esc saves and closes, `⌘1–4` switches the type (quote / figure / data / idea), `⌘⌫` discards an accidental capture.
 
 **Auto-capture**
 

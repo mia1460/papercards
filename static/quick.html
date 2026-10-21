@@ -42,7 +42,8 @@ input:focus, textarea.note:focus { border-color: var(--accent); }
 .tags input { border: 0; padding: 2px; flex: 1; min-width: 80px; background: transparent; }
 .tagbox { position: relative; }
 .sug { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: 5; background: var(--panel);
-       border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.12); padding: 3px 0; }
+       border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.12); padding: 3px 0;
+       overflow-y: auto; }
 .sug.open { display: block; }
 .sug.up { top: auto; bottom: calc(100% + 2px); }
 .sug div { padding: 3px 10px; cursor: pointer; display: flex; justify-content: space-between; }
@@ -158,32 +159,38 @@ async function save() {
   closePanel();
 }
 function addTag(v = $('tagIn').value) {
-  v = v.trim().replace(/^#/, ''); sugAll = false;
+  v = v.trim().replace(/^#/, '');
   if (v && !tags.includes(v)) tags.push(v);
   $('tagIn').value = ''; renderTags(); renderSug();
   return !!v;
 }
 // 标签补全：不用原生 datalist（WKWebView 里回车选候选项时拿不到选中的值），自己画一个候选列表
-let sugs = [], sugAt = -1, sugAll = false;   // sugAll：框是空的也列出常用标签（按 ↓ 或点输入框时）
+let sugs = [], sugAt = -1, sugAll = true;    // sugAll：框是空的也列出全部标签（面板弹出、点输入框、按 ↓ 时）
 function renderSug() {
   const q = $('tagIn').value.trim().replace(/^#/, '').toLowerCase();
-  sugs = q || sugAll ? allTags.filter(([t]) => !tags.includes(t) && t.toLowerCase().includes(q)).slice(0, 6) : [];
+  sugs = q || sugAll ? allTags.filter(([t]) => !tags.includes(t) && t.toLowerCase().includes(q)) : [];
   if (sugAt >= sugs.length) sugAt = -1;
   const el = $('sug');
   el.innerHTML = sugs.map(([t, n], i) => `<div class="${i === sugAt ? 'on' : ''}" data-i="${i}">${esc(t)}<span>${n}</span></div>`).join('');
   el.classList.toggle('open', sugs.length > 0 && document.activeElement === $('tagIn'));
-  // 面板窗口很矮，标签框靠下：下方放不下就往上展开，免得列表被窗口裁掉
-  el.classList.remove('up');
-  if (el.classList.contains('open') && el.getBoundingClientRect().bottom > innerHeight) el.classList.add('up');
+  // 面板窗口很矮，标签框靠下：下方放不下就往上展开，免得列表被窗口裁掉；还放不下就在列表里滚动
+  el.classList.remove('up'); el.style.maxHeight = '';
+  if (!el.classList.contains('open')) return;
+  const box = $('tags').getBoundingClientRect(), below = innerHeight - box.bottom - 6, above = box.top - 6;
+  const up = el.scrollHeight > below && above > below;
+  el.classList.toggle('up', up);
+  el.style.maxHeight = (up ? above : below) + 'px';
+  el.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
 }
 $('sug').addEventListener('mousedown', e => {
   const d = e.target.closest('[data-i]');
   if (d) { e.preventDefault(); sugAt = -1; addTag(sugs[+d.dataset.i][0]); }
 });
-$('tagIn').addEventListener('input', () => { sugAt = -1; if (!$('tagIn').value) sugAll = false; renderSug(); });
+$('tagIn').addEventListener('input', () => { sugAt = -1; renderSug(); });
 $('tagIn').addEventListener('mousedown', () => { sugAll = true; setTimeout(renderSug); });
-$('tagIn').addEventListener('blur', () => { sugAll = false; $('sug').classList.remove('open'); });
-$('tagIn').addEventListener('focus', renderSug);
+$('tagIn').addEventListener('blur', () => $('sug').classList.remove('open'));
+$('tagIn').addEventListener('focus', () => { sugAll = true; renderSug(); });
+new ResizeObserver(() => renderSug()).observe($('preview'));   // 图片加载完会把标签框往下推，重新定位列表
 
 // 输入法判断：中文输入法里按回车 / Esc 是给输入法用的（确认字母、取消拼音），不能当成保存 / 关闭。
 // Safari 内核（录入面板所在的 Hammerspoon 窗口）会先结束输入再派发按键，isComposing 已是 false，
