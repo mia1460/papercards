@@ -12,6 +12,7 @@ import shutil
 import sqlite3
 import struct
 import subprocess
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -168,10 +169,32 @@ def upsert_paper(c, meta, override=False):
 
 # ---------------------------------------------------------------- Zotero
 
+_zsnap = {"sig": None, "dir": None}
+
+
 def zotero_db():
+    """只读打开 Zotero 库。Zotero 运行时独占数据库，最近的改动（比如刚导入的论文）还在 -wal 文件里没写回主文件，
+    immutable 方式读不到；所以有 -wal 时把两个文件拷一份快照来读（库文件不大，变了才重新拷）。"""
     path = os.path.join(ZOTERO_DIR, "zotero.sqlite")
     if not os.path.exists(path):
         return None
+    wal = path + "-wal"
+    if os.path.exists(wal) and os.path.getsize(wal) > 0:
+        try:
+            sig = tuple((st.st_mtime_ns, st.st_size) for st in (os.stat(path), os.stat(wal)))
+            if sig != _zsnap["sig"]:
+                d = tempfile.mkdtemp(prefix="papercards-zotero-")
+                shutil.copyfile(path, os.path.join(d, "zotero.sqlite"))
+                shutil.copyfile(wal, os.path.join(d, "zotero.sqlite-wal"))
+                old, _zsnap["dir"], _zsnap["sig"] = _zsnap["dir"], d, sig
+                if old:
+                    shutil.rmtree(old, ignore_errors=True)
+            conn = sqlite3.connect(os.path.join(_zsnap["dir"], "zotero.sqlite"))
+            conn.execute("SELECT 1 FROM items LIMIT 1")
+            conn.row_factory = sqlite3.Row
+            return conn
+        except (OSError, sqlite3.Error):
+            _zsnap["sig"] = None   # 拷的时候正好赶上 Zotero 写库：这次退回只读主文件，下次重拷
     conn = sqlite3.connect(f"file:{path}?immutable=1", uri=True)
     conn.row_factory = sqlite3.Row
     return conn
@@ -229,13 +252,29 @@ def zotero_current(window_title):
         if title and wt and (title[:60] in wt or wt.split(" - ")[0][:60] in title):
             chosen = (att_key, p, meta)
             break
+    if not chosen and wt:
+        # 刚打开的论文：Zotero 过一会儿才写阅读器状态文件，直接按窗口标题在库里找带 PDF 的条目
+        head = wt.split(" - ")[0].strip()[:60]
+        r = z.execute(
+            "SELECT i.key, ia.parentItemID FROM itemAttachments ia JOIN items i ON i.itemID=ia.itemID "
+            "JOIN itemData d ON d.itemID=ia.parentItemID JOIN fields f ON f.fieldID=d.fieldID "
+            "JOIN itemDataValues v ON v.valueID=d.valueID "
+            "WHERE f.fieldName='title' AND instr(lower(v.value), ?) > 0 "
+            "ORDER BY ia.contentType='application/pdf' DESC, i.dateModified DESC LIMIT 1", (head,)).fetchone() if head else None
+        if r:
+            chosen = (r[0], None, zotero_item_meta(z, r[1]))
     if not chosen:
         return None, None, None
     att_key, p, meta = chosen
+    page = None
     try:
-        page = str(json.load(open(p)).get("pageIndex", 0) + 1)
+        if p:
+            page = str(json.load(open(p)).get("pageIndex", 0) + 1)
+        else:
+            v = z.execute("SELECT value FROM syncedSettings WHERE setting=?", ("lastPageIndex_u_" + att_key,)).fetchone()
+            page = str(int(v[0]) + 1) if v else None
     except Exception:
-        page = None
+        pass
     return meta, att_key, page
 
 

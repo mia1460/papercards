@@ -121,7 +121,7 @@ Hammerspoon (papercards.lua)            server.py (127.0.0.1:8787)
   capture panel (static/quick.html) ◀──   card wall (static/index.html)
 ```
 
-- The paper and page currently open in Zotero are inferred from the window title plus the `.zotero-reader-state` file in each attachment folder; `zotero.sqlite` is opened read-only and your Zotero library is never modified
+- The paper and page currently open in Zotero are inferred from the window title plus the `.zotero-reader-state` file in each attachment folder; `zotero.sqlite` is read from a temporary snapshot that includes its `-wal` file (so papers you just imported are found too), and your Zotero library is never modified; a paper opened for the first time, before Zotero writes its state file, is matched by window title
 - Snips go through the Snipaste CLI (`snip --last -o file`); auto-capture reads the region from Snipaste's log and takes silent shots with the system `screencapture`
 
 ## License

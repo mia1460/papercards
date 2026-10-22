@@ -121,7 +121,7 @@ Hammerspoon (papercards.lua)          server.py (127.0.0.1:8787)
   弹出录入面板 (static/quick.html) ◀──  卡片墙 (static/index.html)
 ```
 
-- Zotero 当前阅读的论文和页码：通过窗口标题 + 每个附件目录下的 `.zotero-reader-state` 判断，以只读方式读取 `zotero.sqlite`，不会修改你的 Zotero 库
+- Zotero 当前阅读的论文和页码：通过窗口标题 + 每个附件目录下的 `.zotero-reader-state` 判断，以只读方式读取 `zotero.sqlite`（Zotero 运行时最近的改动还在 `-wal` 文件里，会连同它拷一份临时快照来读，刚导入的论文也能识别），不会修改你的 Zotero 库；刚打开、还没生成状态文件的论文直接按窗口标题匹配
 - 截图通过 Snipaste 命令行（`snip --last -o file`）完成；自动截图从 Snipaste 日志读取区域坐标，再用系统 `screencapture` 静默截取
 
 ## License
