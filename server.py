@@ -685,6 +685,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.static(name, "text/javascript; charset=utf-8" if name.endswith(".js") else "text/css; charset=utf-8")
         if path == "/api/ping":
             return self.send(200, {"ok": True})
+        if path == "/api/version":   # 页面代码的版本（静态文件最后修改时间），卡片墙据此提示刷新
+            v = max(os.path.getmtime(os.path.join(STATIC, n)) for n in os.listdir(STATIC))
+            return self.send(200, {"v": v})
         if path.startswith("/images/"):
             name = os.path.basename(path)
             fp = os.path.join(IMAGES, name)

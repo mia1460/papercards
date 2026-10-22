@@ -69,7 +69,7 @@ The cursor starts in the tag box: all existing tags are listed when the panel op
 - Type order puts ideas first by default; drag the type buttons at the top to reorder
 - **Keyboard browsing**: `←` `→` previous / next card (snapped to the top), `⌥←` `⌥→` first card of the previous / next type; in the quad layout this acts on the pane under the mouse
 - Add / remove tags right on a card (with autocomplete); rename, merge or delete tags from the sidebar; double-click a card's text or click its note to edit inline (a single click expands long text)
-- Paste an image or text with `⌘V` to create a card; timestamps down to the second
+- Paste an image or text with `⌘V` to create a card; timestamps down to the second; after an update the page offers a one-click reload
 - Export to Markdown (a zip with images and BibTeX): sections and order follow the current view (by type / by source / flat); images are named by type and sequence, e.g. `图表-1.png` (figure-1), numbered by creation time within each type
 - Save a view as a bookmark with URL parameters, e.g. `?layout=quad&q=60,50,50&tags=results` (parameters: `layout` `group` `sort` `size` `sources` `stags` `tags` `h` `q`)
 
