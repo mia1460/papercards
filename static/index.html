@@ -1164,8 +1164,7 @@ function editPaper(id) {
   const all = new Map();
   S.papers.forEach(x => (x.tags || []).forEach(t => all.set(t, (all.get(t) || 0) + 1)));
   $('srcTagSuggest').innerHTML = [...all.keys()].map(t => `<option value="${esc(t)}">`).join('');
-  const venue = (p.venue || '').match(/\(([A-Za-z][\w-]{1,15})\)/)?.[1] || ((p.venue || '').length <= 20 ? p.venue : '');
-  const sug = [venue, ...[...all].sort((a, b) => b[1] - a[1]).map(([t]) => t)].filter(t => t && !(p.tags || []).includes(t));
+  const sug = [p.venue_short, ...[...all].sort((a, b) => b[1] - a[1]).map(([t]) => t)].filter(t => t && !(p.tags || []).includes(t));
   $('pTagSug').innerHTML = [...new Set(sug)].slice(0, 8).map(t => `<button type="button" data-t="${esc(t)}">＋${esc(t)}</button>`).join('');
   $('paperDlg').showModal();
 }

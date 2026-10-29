@@ -41,6 +41,13 @@ input:focus, textarea.note:focus { border-color: var(--accent); }
 .tags:focus-within { border-color: var(--accent); }
 .tags input { border: 0; padding: 2px; flex: 1; min-width: 80px; background: transparent; }
 .tagbox { position: relative; }
+.srctags { display: none; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; margin-top: -4px; }
+.srctags.on { display: flex; }
+.srctags .lbl { color: var(--muted); }
+.srctags .chip { background: none; border: 1px solid var(--muted); color: var(--muted); }
+.srctags input { border: 0; border-bottom: 1px dashed var(--line); border-radius: 0; padding: 1px 2px; width: 150px; flex: 0 1 auto; font-size: 12px; background: transparent; }
+.srctags input:focus { border-bottom-color: var(--accent); }
+.srctags .add { border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; padding: 0 2px; }
 .sug { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: 5; background: var(--panel);
        border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.12); padding: 3px 0;
        overflow-y: auto; }
@@ -65,6 +72,7 @@ textarea.note { resize: none; height: 52px; }
 <div class="types" id="types"></div>
 <div class="preview" id="preview"></div>
 <div class="source"><span class="t" id="srcText">…</span><button id="srcBtn">修改来源</button></div>
+<div class="srctags" id="srcTags"></div>
 <div class="srcedit" id="srcEdit">
   <div class="row">
     <input id="lookup" placeholder="粘贴 DOI / arXiv 号 / 链接，回车自动识别">
@@ -88,6 +96,7 @@ textarea.note { resize: none; height: 52px; }
 const id = new URLSearchParams(location.search).get('id');
 const TYPES = [['quote', '摘录'], ['figure', '图表'], ['data', '数据'], ['idea', '想法']];
 let card, tags = [], papers = [], allTags = [];
+let stags = [], stagsDirty = false, stagsOn = false;   // 来源标签（会议、团队等）：第一次收这篇论文时顺手打上
 const $ = s => document.getElementById(s);
 const api = (p, o = {}) => fetch(p, { headers: { 'Content-Type': 'application/json' }, ...o }).then(r => r.json());
 
@@ -114,6 +123,50 @@ function renderSource() {
   $('srcText').title = p ? p.title : '';
   if (!p && !$('srcEdit').classList.contains('open')) { $('srcEdit').classList.add('open'); }
 }
+// 来源标签那一行：这篇论文是这次新收的、或还没有来源标签时才显示；建议 = 会议简称 + 常用的已有来源标签
+function renderSrcTags() {
+  const p = card.paper;
+  if (!stagsDirty) {
+    stags = p ? [...(p.tags || [])] : [];
+    if (p && !p.id && !stags.length && p.venue_short) stags = [p.venue_short];   // 还没入库的新论文：保存时会自动打上会议标签
+    stagsOn = !!p && (!stags.length || !p.id || p.created_at >= card.created_at - 5);
+  }
+  const el = $('srcTags');
+  el.classList.toggle('on', stagsOn);
+  if (!stagsOn) return;
+  const keep = document.activeElement && document.activeElement.id === 'stagIn' ? $('stagIn').value : null;
+  const used = new Map();
+  papers.forEach(x => (x.tags || []).forEach(t => used.set(t, (used.get(t) || 0) + 1)));
+  const sug = [...new Set([p && p.venue_short, ...[...used].sort((a, b) => b[1] - a[1]).map(([t]) => t)])]
+    .filter(t => t && !stags.includes(t)).slice(0, 4);
+  el.innerHTML = '<span class="lbl">来源标签</span>'
+    + stags.map((t, i) => `<span class="chip" data-i="${i}" title="点击删除">${esc(t)}</span>`).join('')
+    + '<input id="stagIn" autocomplete="off" placeholder="会议 / 团队，回车添加">'
+    + sug.map(t => `<button class="add" data-t="${esc(t)}">＋${esc(t)}</button>`).join('');
+  if (keep !== null) { $('stagIn').value = keep; $('stagIn').focus(); }
+}
+function addSrcTag(v) {
+  v = (v || '').trim().replace(/^#/, '');
+  if (v && !stags.includes(v)) stags.push(v);
+  stagsDirty = true; renderSrcTags();
+  return !!v;
+}
+$('srcTags').addEventListener('mousedown', e => {
+  const c = e.target.closest('.chip'), a = e.target.closest('.add');
+  if (!c && !a) return;
+  e.preventDefault();
+  if (c) { stags.splice(+c.dataset.i, 1); stagsDirty = true; renderSrcTags(); }
+  else addSrcTag(a.dataset.t);
+});
+$('srcTags').addEventListener('keydown', e => {
+  if (e.target.id !== 'stagIn' || isIME(e) || e.metaKey) return;
+  if (e.key === 'Enter' || e.key === ',' || e.key === '，') {
+    e.preventDefault(); e.stopPropagation();
+    const v = e.target.value; e.target.value = '';
+    if (!addSrcTag(v) && e.key === 'Enter') $('tagIn').focus();   // 空回车：回到卡片标签
+    else $('stagIn').focus();
+  } else if (e.key === 'Backspace' && !e.target.value && stags.length) { stags.pop(); stagsDirty = true; renderSrcTags(); }
+});
 function renderTags() {
   $('tags').querySelectorAll('.chip').forEach(c => c.remove());
   tags.forEach((t, i) => {
@@ -133,11 +186,12 @@ async function load() {
     : `<textarea id="content"></textarea>`;
   if (!card.image) { $('content').value = card.content || ''; }
   $('page').value = card.page || '';
-  renderTypes(); renderSource(); renderTags();
+  renderTypes(); renderSource(); renderTags(); renderSrcTags();
   $('tagIn').focus();
   if (card.resolving) poll();
   api('/api/tags').then(ts => { allTags = ts; renderSug(); });
   papers = await api('/api/papers');
+  renderSrcTags();
   $('papers').innerHTML = papers.map(p => `<option value="${esc(p.title)}">${esc(cite(p))}</option>`).join('');
 }
 async function poll() {
@@ -145,7 +199,7 @@ async function poll() {
     await new Promise(r => setTimeout(r, 700));
     const c = await api('/api/cards/' + id);
     card.paper = c.paper; card.resolving = c.resolving;
-    renderSource();
+    renderSource(); renderSrcTags();
   }
 }
 let newPaper;   // 通过 lookup 得到的新来源
@@ -155,6 +209,8 @@ async function save() {
   if ($('content')) body.content = $('content').value;
   if (newPaper) body.paper = newPaper;
   else if (card._pickedId !== undefined) body.paper_id = card._pickedId;
+  if (stagsOn && ($('stagIn') && $('stagIn').value.trim())) addSrcTag($('stagIn').value);
+  if (stagsOn && stagsDirty) body.paper_tags = stags;
   await api('/api/cards/' + id, { method: 'PUT', body: JSON.stringify(body) });
   closePanel();
 }
@@ -209,17 +265,17 @@ $('lookup').addEventListener('keydown', async e => {
   const m = await api('/api/lookup?q=' + encodeURIComponent(q));
   if (m && m.title) { newPaper = m; card.paper = m; }
   else { newPaper = { title: q, url: q.startsWith('http') ? q : null }; card.paper = newPaper; }
-  renderSource();
+  stagsDirty = false; renderSource(); renderSrcTags();
   $('tagIn').focus();
 });
 $('pick').addEventListener('change', () => {
   const p = papers.find(p => p.title === $('pick').value);
-  if (p) { card.paper = p; card._pickedId = p.id; newPaper = null; renderSource(); }
+  if (p) { card.paper = p; card._pickedId = p.id; newPaper = null; stagsDirty = false; renderSource(); renderSrcTags(); }
 });
 $('pick').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !isIME(e) && $('pick').value && !papers.find(p => p.title === $('pick').value)) {
     e.preventDefault(); e.stopPropagation();
-    newPaper = { title: $('pick').value.trim() }; card.paper = newPaper; renderSource(); $('tagIn').focus();
+    newPaper = { title: $('pick').value.trim() }; card.paper = newPaper; stagsDirty = false; renderSource(); renderSrcTags(); $('tagIn').focus();
   }
 });
 $('tagIn').addEventListener('keydown', e => {

@@ -79,12 +79,49 @@ def init_db():
                 c.execute(f"ALTER TABLE cards ADD COLUMN {col} TEXT")
 
 
+# 常见会议 / 期刊的简称：会议全名里没有括号缩写时按名字认
+VENUE_ABBR = [
+    (r"usenix annual technical|\batc\b", "ATC"), (r"operating systems design and implementation|\bosdi\b", "OSDI"),
+    (r"symposium on operating systems principles|\bsosp\b", "SOSP"), (r"networked systems design|\bnsdi\b", "NSDI"),
+    (r"eurosys|european conference on computer systems", "EuroSys"), (r"\basplos\b|architectural support for programming", "ASPLOS"),
+    (r"\bisca\b|international symposium on computer architecture", "ISCA"), (r"\bmicro\b.*microarchitecture|symposium on microarchitecture", "MICRO"),
+    (r"\bhpca\b|high[- ]performance computer architecture", "HPCA"), (r"\bsigcomm\b", "SIGCOMM"),
+    (r"\bsigmod\b|management of data", "SIGMOD"), (r"\bvldb\b|very large data bases", "VLDB"),
+    (r"file and storage technologies|\bfast\b", "FAST"), (r"symposium on cloud computing|\bsocc\b", "SoCC"),
+    (r"\bmiddleware\b", "Middleware"), (r"\bppopp\b|principles and practice of parallel programming", "PPoPP"),
+    (r"high performance computing, networking, storage|\bsc\d{2}\b|supercomputing", "SC"),
+    (r"neural information processing|\bneurips\b|\bnips\b", "NeurIPS"), (r"international conference on machine learning|\bicml\b", "ICML"),
+    (r"learning representations|\biclr\b", "ICLR"), (r"computer vision and pattern recognition|\bcvpr\b", "CVPR"),
+    (r"\biccv\b|international conference on computer vision", "ICCV"), (r"\beccv\b|european conference on computer vision", "ECCV"),
+    (r"association for computational linguistics|\bacl\b", "ACL"), (r"\bemnlp\b|empirical methods in natural language", "EMNLP"),
+    (r"knowledge discovery and data mining|\bkdd\b", "KDD"), (r"\bthe web conference\b|\bwww\b", "WWW"),
+    (r"recommender systems|\brecsys\b", "RecSys"), (r"\bsigmetrics\b|measurement and modeling of computer systems", "SIGMETRICS"),
+    (r"transactions on parallel and distributed|\btpds\b", "TPDS"), (r"transactions on computer systems|\btocs\b", "TOCS"),
+    (r"\baaai\b", "AAAI"), (r"\bijcai\b", "IJCAI"), (r"\bmlsys\b|machine learning and systems", "MLSys"),
+]
+
+
+def venue_short(venue):
+    """会议名 → 适合做来源标签的简称：认得的会议用简称，否则取括号里的缩写，再否则用较短的原名。预印本不算。"""
+    v = (venue or "").strip()
+    if not v or re.search(r"arxiv|biorxiv|preprint|ssrn", v, re.I):
+        return None
+    for pat, abbr in VENUE_ABBR:
+        if re.search(pat, v, re.I):
+            return abbr
+    m = re.search(r"\(([A-Za-z][\w-]{1,15})\)", v)
+    if m:
+        return re.sub(r"[-\s]?\d{2,4}$", "", m.group(1))
+    return v if len(v) <= 20 else None
+
+
 def paper_dict(r):
     if r is None:
         return None
     d = dict(r)
     d["authors"] = json.loads(d["authors"] or "[]")
     d["tags"] = json.loads(d.get("tags") or "[]")
+    d["venue_short"] = venue_short(d.get("venue"))
     return d
 
 
@@ -157,13 +194,17 @@ def upsert_paper(c, meta, override=False):
         for f in fields:
             if meta.get(f) and (not row[f] or override or meta.get("zotero_key")):
                 updates[f] = meta[f]
+        # 来源标签从没设过（NULL，不是用户清空的 []）且刚拿到会议名：自动打上会议标签
+        if row["tags"] is None and updates.get("venue") and venue_short(updates["venue"]):
+            updates["tags"] = json.dumps([venue_short(updates["venue"])], ensure_ascii=False)
         if updates:
             c.execute("UPDATE papers SET " + ",".join(f"{k}=?" for k in updates) + " WHERE id=?",
                       (*updates.values(), row["id"]))
         return row["id"]
     key = next((f"{f}:{meta[f]}" for f in ("arxiv", "doi", "zotero_key", "url", "title") if meta.get(f)), str(uuid.uuid4()))
-    cur = c.execute("INSERT INTO papers (key," + ",".join(fields) + ",created_at) VALUES (?" + ",?" * len(fields) + ",?)",
-                    (key, *[meta.get(f) for f in fields], time.time()))
+    vs = venue_short(meta.get("venue"))
+    cur = c.execute("INSERT INTO papers (key," + ",".join(fields) + ",tags,created_at) VALUES (?" + ",?" * len(fields) + ",?,?)",
+                    (key, *[meta.get(f) for f in fields], json.dumps([vs], ensure_ascii=False) if vs else None, time.time()))
     return cur.lastrowid
 
 
@@ -735,7 +776,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, bibtex(paper_dict(c.execute("SELECT * FROM papers WHERE id=?", (m.group(1),)).fetchone())), "text/plain; charset=utf-8")
         if path == "/api/lookup":
             try:
-                return self.send(200, lookup_identifier(q.get("q", "")) or {})
+                m = lookup_identifier(q.get("q", "")) or {}
+                if m:
+                    m["venue_short"] = venue_short(m.get("venue"))
+                return self.send(200, m)
             except Exception as e:
                 return self.send(400, {"error": str(e)})
         self.send(404, {"error": "not found"})
@@ -812,6 +856,9 @@ class Handler(BaseHTTPRequestHandler):
                 if upd:
                     c.execute("UPDATE cards SET " + ",".join(f"{k}=?" for k in upd) + ", updated_at=? WHERE id=?",
                               (*upd.values(), time.time(), cid))
+                if isinstance(b.get("paper_tags"), list):   # 录入面板里顺手设的来源标签（会议等）
+                    c.execute("UPDATE papers SET tags=? WHERE id=(SELECT paper_id FROM cards WHERE id=?)",
+                              (json.dumps(b["paper_tags"], ensure_ascii=False), cid))
                 return self.send(200, card_dict(c, c.execute("SELECT * FROM cards WHERE id=?", (cid,)).fetchone()))
             m = re.fullmatch(r"/api/papers/(\d+)", path)
             if m:

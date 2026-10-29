@@ -52,6 +52,8 @@ Everything stays on your machine (SQLite + an image folder). No cloud services.
 
 The cursor starts in the tag box: all existing tags are listed when the panel opens and filtered as you type (`↑` `↓` to pick, `Tab` takes the first); Enter adds a tag, Enter on an empty box jumps to the note; Enter in the note saves (⇧Enter for a new line). `⌘⏎` saves from anywhere, Esc saves and closes, `⌘1–4` switches the type (quote / figure / data / idea), `⌘⌫` discards an accidental capture.
 
+The first time you capture from a paper, the panel shows a "source tags" row: a recognized venue is filled in as its abbreviation (e.g. OSDI, ATC, NeurIPS), and you can add a venue, team, etc. by hand or with one click from the suggestions.
+
 **Auto-capture**
 
 - The region is locked when you start (Snipaste's last region by default; re-select it with Snipaste from the 📷 menu bar item), so you can keep using Snipaste for other things

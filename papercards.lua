@@ -175,7 +175,7 @@ local function showPanel(id, prevWin)
   panelUC = uc
   local screen = (prevWin and prevWin:screen()) or hs.mouse.getCurrentScreen()
   local f = screen:frame()
-  local w, h = 480, 420
+  local w, h = 480, 450
   local rect = { x = f.x + (f.w - w) / 2, y = f.y + f.h * 0.18, w = w, h = h }
   wv = hs.webview.new(rect, { developerExtrasEnabled = true }, uc)
     :windowTitle("PaperCards · 新卡片")
